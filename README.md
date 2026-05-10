@@ -59,6 +59,10 @@ Product IDs: `rawnaq-c`, `khiffabiotic`, `laylmag`. Sum of `offer_qty` must be *
 
 Set **`CORS_ORIGINS`** (comma-separated) so the frontend domain can call this API from the browser.
 
+## Google Sheet (orders row)
+
+After each successful `POST /api/orders`, the API can POST one JSON row to **`GOOGLE_SHEET_WEBHOOK_URL`** (Google Apps Script web app). Reference script: **`backend/sheet/google-apps-script-webhook.js`** — paste it into the spreadsheet’s Apps Script editor, deploy as web app, put the URL in `.env`.
+
 ## Health
 
 `GET /health` → `{"ok": true}`
