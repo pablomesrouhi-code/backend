@@ -82,7 +82,20 @@ def evaluate_order_fraud(
     """
     Returns allowed=False with Arabic PUBLIC_BLOCK_DETAIL message when blocked.
     Test whitelist bypasses all risk rules (production QA).
+    Set MAXMIND_ENABLED=false to disable all checks (troubleshooting only).
     """
+    if not _env_bool("MAXMIND_ENABLED", True):
+        logger.warning(
+            "[maxmind] MAXMIND_ENABLED=false — fraud checks skipped (disable in production after debugging)"
+        )
+        return FraudEvalResult(
+            allowed=True,
+            detail=None,
+            fields=None,
+            raw_response=None,
+            source="disabled",
+        )
+
     if is_test_phone_whitelisted(phone_local):
         logger.info("[maxmind] bypass test whitelist phone=%s", mask_phone_sa(phone_local))
         return FraudEvalResult(

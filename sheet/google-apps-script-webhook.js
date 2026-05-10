@@ -7,7 +7,22 @@
  *
  * Sheet row 1 (headers), same order as your CSV:
  * DATE | ORDERID | COUNTRY | NAME | PHONE | PRODUCT | SKU | quantité | TOTAL PRICE | CURRENCY | STATUS
+ *
+ * doGet: opening the /exec URL in a browser uses GET — without this, Google shows "doGet not found".
+ * Orders still use POST from the backend only.
  */
+function doGet() {
+  const out = ContentService.createTextOutput(
+    JSON.stringify({
+      ok: true,
+      service: 'nabtalabo-sheet-webhook',
+      hint: 'Orders are sent via POST JSON from the Nabtalabo API (GOOGLE_SHEET_WEBHOOK_URL).',
+    })
+  );
+  out.setMimeType(ContentService.MimeType.JSON);
+  return out;
+}
+
 function doPost(e) {
   if (!e || !e.postData || !e.postData.contents) {
     return jsonResponse({ ok: false, error: 'empty_body' }, 400);
