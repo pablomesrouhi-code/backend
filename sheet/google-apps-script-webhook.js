@@ -1,60 +1,57 @@
 /**
- * NabtaLabo — إلحاق طلب واحد بالصفحة الأولى من جدولك (نفس أعمدة الشيت التجارية).
- * النسخة المرجعية لهذا السكربت موجودة تحت مستودع الـ backend: `backend/sheet/`
+ * NabtaLabo — append one order row from backend POST JSON.
  *
- * خطوات النشر في Google Sheets:
- * 1) Extensions → Apps Script → الصق هذا الملف وحفظ.
- * 2) Deploy → New deployment → نوع Web app، Execute as: Me، Who has access: Anyone.
- * 3) انسخ عنوان URL الذي يظهر بعد النشر وأضعه في المتغير GOOGLE_SHEET_WEBHOOK_URL في بيئة الـ backend (.env).
+ * Deploy: Extensions → Apps Script → paste → Deploy → New deployment → Web app
+ * Execute as: Me | Who has access: Anyone (or Anyone with link)
+ * Put the deployment URL in backend env GOOGLE_SHEET_WEBHOOK_URL (no secret).
  *
- * المتوقع أن يكون الصفحة الأولى (أو الورقة Sheet1) بها صف عنوان بهذا الترتيب:
+ * Sheet row 1 (headers), same order as your CSV:
  * DATE | ORDERID | COUNTRY | NAME | PHONE | PRODUCT | SKU | quantité | TOTAL PRICE | CURRENCY | STATUS
- *
- * JSON المرسل من الـ API يطابق هذه الحقول (snake_case):
- * date, order_id, country, name, phone, product, sku, quantity, total_price, currency, status (فارغ)
  */
 function doPost(e) {
+  if (!e || !e.postData || !e.postData.contents) {
+    return jsonResponse({ ok: false, error: 'empty_body' }, 400);
+  }
+  var data;
   try {
-    const raw = (e.postData && e.postData.contents) || "{}";
-    const body =
-      typeof raw === "string" ? JSON.parse(raw) : raw;
+    data = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return jsonResponse({ ok: false, error: 'invalid_json' }, 400);
+  }
 
-    const row = [
-      body.date || "",
-      body.order_id || "",
-      body.country || "",
-      body.name || "",
-      body.phone || "",
-      body.product || "",
-      body.sku || "",
-      body.quantity || "",
-      body.total_price != null && body.total_price !== ""
-        ? body.total_price
-        : "",
-      body.currency || "",
-      body.status !== undefined && body.status !== null ? body.status : "",
-    ];
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheets()[0];
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet =
-      ss.getSheetByName("Sheet1") || ss.getActiveSheet();
-    sheet.appendRow(row);
+    var status = data.status != null ? String(data.status) : '';
 
-    return jsonResponse({ ok: true, received: row.length }, 200);
-  } catch (error) {
-    return jsonResponse({ ok: false, error: String(error) }, 500);
+    sheet.appendRow([
+      data.date,
+      data.order_id,
+      data.country,
+      data.name,
+      data.phone,
+      data.product,
+      data.sku,
+      data.quantity,
+      data.total_price,
+      data.currency,
+      status,
+    ]);
+
+    return jsonResponse({ ok: true });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err) }, 500);
   }
 }
 
-/** فحص يدوي من المتصفح بعد النشر: افتح عنوان الـ URL فقط */
-function doGet() {
-  return ContentService.createTextOutput(
-    "NabtaLabo sheet webhook: use POST JSON from backend."
-  );
-}
-
-function jsonResponse(payload, statusCode) {
-  return ContentService.createTextOutput(
-    JSON.stringify(Object.assign({ status: statusCode }, payload))
-  ).setMimeType(ContentService.MimeType.JSON);
+function jsonResponse(obj, statusCode) {
+  var out = ContentService.createTextOutput(JSON.stringify(obj));
+  out.setMimeType(ContentService.MimeType.JSON);
+  if (typeof statusCode === 'number') {
+    // Apps Script ignores HTTP status on TextOutput for simple web apps,
+    // but keep shape for readability if you migrate to OAuth / API Gateway.
+    return out;
+  }
+  return out;
 }

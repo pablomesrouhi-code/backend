@@ -18,6 +18,7 @@ from app.services.catalog import resolve_product
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
 from app.services.sheet_webhook import build_sheet_row, send_google_sheet_webhook
+from app.services.maxmind_fraud import evaluate_order_fraud
 from app.services.pricing import (
     UPSELL_PRICE_SAR,
     allocate_line_totals,
@@ -92,12 +93,31 @@ def create_order(
         logger.warning("[orders] phone_invalid masked=%s: %s", mask_phone_sa(body.phone), e)
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    fraud = evaluate_order_fraud(
+        client_ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        phone_e164=phone_e164,
+        phone_local=phone_local,
+        order_total_sar=subtotal + upsell_total,
+    )
+    if not fraud.allowed:
+        logger.info(
+            "[orders] fraud_block source=%s phone=%s",
+            fraud.source,
+            mask_phone_sa(body.phone),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=fraud.detail or "عذراً، لا يمكن إكمال الطلب حالياً.",
+        )
+
     line_totals = allocate_line_totals(subtotal, quantities)
     unit_prices = line_unit_prices(line_totals, quantities)
 
     order_id = uuid.uuid4()
     order_number = next_order_number(db)
 
+    mm_fields = fraud.fields
     order = Order(
         id=order_id,
         order_number=order_number,
@@ -118,6 +138,12 @@ def create_order(
         purchase_event_id=body.purchase_event_id,
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        maxmind_country_iso=mm_fields.country_iso if mm_fields else None,
+        maxmind_risk_score=mm_fields.risk_score if mm_fields else None,
+        maxmind_is_vpn=mm_fields.is_vpn if mm_fields else None,
+        maxmind_is_proxy=mm_fields.is_proxy if mm_fields else None,
+        maxmind_is_tor=mm_fields.is_tor if mm_fields else None,
+        maxmind_is_hosting=mm_fields.is_hosting if mm_fields else None,
     )
     db.add(order)
 
@@ -191,6 +217,9 @@ def create_order(
             persisted.sheet_error = None
         elif outcome == "failed":
             persisted.sheet_error = (sheet_err or "unknown")[:4000]
+        elif outcome == "skipped":
+            # Order is in Postgres but Sheet did not run (missing URL) — visible for ops/COD follow-up.
+            persisted.sheet_error = (sheet_err or "sheet_skipped")[:4000]
         try:
             db.commit()
         except SQLAlchemyError:

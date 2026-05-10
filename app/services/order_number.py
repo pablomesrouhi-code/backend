@@ -1,4 +1,4 @@
-"""Readable order numbers nama-YYYY-NNNNNN (Sheets ORDERID column)."""
+"""Readable order numbers nabta-YYYY-NNNNNN (Sheets ORDERID column)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.models.order_models import Order
 
 def next_order_number(db: Session) -> str:
     year = datetime.now(UTC).year
-    prefix = f"nama-{year}-"
+    prefix = f"nabta-{year}-"
     stmt: Select[tuple[str]] = (
         select(Order.order_number)
         .where(Order.order_number.startswith(prefix))

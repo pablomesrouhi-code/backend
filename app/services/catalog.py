@@ -17,11 +17,11 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
     ),
 }
 
-# Stable SKU per product (shown in Sheets / integrations).
+# Stable opaque SKU per product (Sheets / integrations).
 PRODUCT_SKUS: dict[str, str] = {
-    "rawnaq-c": "NBL-RWQ-849102",
-    "khiffabiotic": "NBL-KHF-572903",
-    "laylmag": "NBL-LYM-318467",
+    "rawnaq-c": "NBT-8K4M2P9Q1",
+    "khiffabiotic": "NBT-3R7V1W6X4",
+    "laylmag": "NBT-5T9Y2Z8A3",
 }
 
 

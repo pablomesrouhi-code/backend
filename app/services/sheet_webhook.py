@@ -1,31 +1,21 @@
-"""POST order summaries to Google Apps Script sheet webhook."""
+"""Push one confirmed order row to Google Sheets via Apps Script URL."""
 
 from __future__ import annotations
 
 import logging
 import os
-from datetime import UTC, datetime
-from typing import Any
-from urllib.parse import urlsplit
-
-import httpx
+import time
+from datetime import datetime
+from typing import Literal
 from zoneinfo import ZoneInfo
 
-from app.services.catalog import resolve_sku, sheet_product_labels
+import httpx
+
+from app.services.catalog import resolve_product, resolve_sku
 
 logger = logging.getLogger(__name__)
 
-_RIYADH = ZoneInfo("Asia/Riyadh")
-
-
-def _normalized_webhook_url(url: str) -> str | None:
-    u = url.strip()
-    if not u:
-        return None
-    parts = urlsplit(u)
-    if parts.scheme not in ("http", "https") or not parts.netloc:
-        return None
-    return u
+Ryadh = ZoneInfo("Asia/Riyadh")
 
 
 def build_sheet_row(
@@ -33,64 +23,96 @@ def build_sheet_row(
     customer_name: str,
     phone_digits: str,
     order_number: str,
-    total_sar: int,
+    total_sar: float,
     lines: list[tuple[str, int]],
-) -> dict[str, Any]:
-    """
-    One row aligned with spreadsheet columns:
-    DATE, ORDERID, COUNTRY, NAME, PHONE, PRODUCT, SKU, quantité,
-    TOTAL PRICE, CURRENCY, STATUS (STATUS left empty — sheet column exists).
-    """
-    if not lines:
-        raise ValueError("sheet webhook needs at least one line item")
+) -> dict[str, str | int]:
+    """JSON body matching spreadsheet columns (DATE … STATUS); status stays empty."""
 
-    short_names = [sheet_product_labels(pid) for pid, _ in lines]
-    skus = [resolve_sku(pid) for pid, _ in lines]
-    qty_parts = [str(qty) for _, qty in lines]
+    order_date = datetime.now(Ryadh).strftime("%d/%m/%Y")
 
-    dt = datetime.now(_RIYADH).strftime("%d/%m/%Y")
+    arabic_names: list[str] = []
+    skus: list[str] = []
+    qtys: list[str] = []
+    for product_id, qty in lines:
+        ar, _en = resolve_product(product_id)
+        arabic_names.append(ar)
+        skus.append(resolve_sku(product_id))
+        qtys.append(str(qty))
+
+    total_int = int(round(total_sar))
 
     return {
-        "date": dt,
+        "date": order_date,
         "order_id": order_number,
         "country": "KSA",
         "name": customer_name.strip(),
-        "phone": phone_digits.strip(),
-        "product": "/".join(short_names),
+        "phone": phone_digits,
+        "product": "/".join(arabic_names),
         "sku": "/".join(skus),
-        "quantity": "/".join(qty_parts),
-        "total_price": total_sar,
+        "quantity": "/".join(qtys),
+        "total_price": total_int,
         "currency": "SAR",
         "status": "",
     }
 
 
-def send_google_sheet_webhook(payload: dict[str, Any]) -> tuple[str, str | None]:
-    """
-    Posts JSON row to Apps Script web app URL.
-
-    Returns (outcome, error_message_or_none) where outcome is
-    skipped | ok | failed.
-    """
-    raw = os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or ""
-    url = _normalized_webhook_url(raw)
-    if not url:
-        logger.info("[sheet_webhook] GOOGLE_SHEET_WEBHOOK_URL not set — skip")
-        return "skipped", None
-
+def _sheet_retries() -> int:
+    raw = os.getenv("GOOGLE_SHEET_WEBHOOK_RETRIES", "5").strip()
     try:
-        with httpx.Client(timeout=20.0) as client:
-            r = client.post(url, json=payload, headers={"Content-Type": "application/json"})
-        if r.status_code >= 400:
-            err = f"HTTP {r.status_code}: {r.text[:500]}"
-            logger.warning("[sheet_webhook] failed %s", err)
-            return "failed", err
-        logger.info("[sheet_webhook] ok status=%s", r.status_code)
-        return "ok", None
-    except httpx.TimeoutException:
-        logger.warning("[sheet_webhook] timeout")
-        return "failed", "timeout"
-    except Exception as exc:
-        msg = str(exc)[:500]
-        logger.warning("[sheet_webhook] error %s", msg)
-        return "failed", msg
+        n = int(raw)
+        return max(1, min(n, 10))
+    except ValueError:
+        return 5
+
+
+def send_google_sheet_webhook(
+    payload: dict[str, str | int],
+) -> tuple[Literal["ok", "skipped", "failed"], str | None]:
+    """POST JSON to Apps Script; retries on transient errors so orders reach the Sheet."""
+
+    url = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
+    if not url:
+        return "skipped", "no_webhook_url"
+
+    retries = _sheet_retries()
+    last_err: str | None = None
+
+    for attempt in range(retries):
+        try:
+            resp = httpx.post(url, json=payload, timeout=25.0)
+        except Exception:
+            last_err = "request_error"
+            logger.warning(
+                "[sheet_webhook] attempt %s/%s connection_error url_host=%s",
+                attempt + 1,
+                retries,
+                url.split("//", 1)[-1][:80],
+            )
+            if attempt < retries - 1:
+                time.sleep(min(8.0, 2**attempt))
+                continue
+            logger.exception("[sheet_webhook] all retries exhausted (connection)")
+            return "failed", last_err
+
+        if resp.is_success:
+            if attempt > 0:
+                logger.info("[sheet_webhook] ok after_retries=%s", attempt + 1)
+            return "ok", None
+
+        code = resp.status_code
+        last_err = f"http_{code}"
+        body_preview = (resp.text or "")[:500]
+        logger.warning(
+            "[sheet_webhook] attempt %s/%s status=%s body=%s",
+            attempt + 1,
+            retries,
+            code,
+            body_preview,
+        )
+        retryable = code in (408, 429, 500, 502, 503, 504)
+        if retryable and attempt < retries - 1:
+            time.sleep(min(8.0, 2**attempt))
+            continue
+        break
+
+    return "failed", last_err or "unknown"
