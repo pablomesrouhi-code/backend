@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,6 +17,7 @@ from app.schemas.order_create import CreateOrderRequest, CreateOrderResponse
 from app.services.catalog import resolve_product
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
+from app.services.sheet_webhook import build_sheet_row, send_google_sheet_webhook
 from app.services.pricing import (
     UPSELL_PRICE_SAR,
     allocate_line_totals,
@@ -164,6 +166,36 @@ def create_order(
             status_code=503,
             detail="تعذر حفظ الطلب في قاعدة البيانات. راجعوا سجلات الـ API وأحوال PostgreSQL.",
         ) from None
+
+    sheet_lines: list[tuple[str, int]] = list(zip(product_keys, quantities, strict=True))
+    if body.accepted_upsell and body.upsell_product_id:
+        sheet_lines.append((body.upsell_product_id.strip().lower(), 1))
+
+    try:
+        sheet_payload = build_sheet_row(
+            customer_name=body.customer_name,
+            phone_digits=phone_digits,
+            order_number=order_number,
+            total_sar=subtotal + upsell_total,
+            lines=sheet_lines,
+        )
+        outcome, sheet_err = send_google_sheet_webhook(sheet_payload)
+    except Exception:
+        logger.exception("[orders] sheet_webhook_prepare_failed order_number=%s", order_number)
+        outcome, sheet_err = "failed", "sheet_payload_error"
+
+    persisted = db.get(Order, order_id)
+    if persisted is not None:
+        if outcome == "ok":
+            persisted.sheet_sent_at = datetime.now(UTC)
+            persisted.sheet_error = None
+        elif outcome == "failed":
+            persisted.sheet_error = (sheet_err or "unknown")[:4000]
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            logger.exception("[orders] sheet_meta_commit_failed order_id=%s", order_id)
+            db.rollback()
 
     logger.info(
         "[orders] SAVED_OK order_number=%s order_id=%s total_sar=%s line_items=%s accepted_upsell=%s",
