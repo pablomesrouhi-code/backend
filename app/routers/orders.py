@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -17,7 +16,7 @@ from app.schemas.order_create import CreateOrderRequest, CreateOrderResponse
 from app.services.catalog import resolve_product
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
-from app.services.sheet_webhook import build_sheet_row, send_google_sheet_webhook
+from app.services.sheet_webhook import apply_sheet_delivery_to_order, build_sheet_row
 from app.services.maxmind_fraud import evaluate_order_fraud
 from app.services.pricing import (
     UPSELL_PRICE_SAR,
@@ -43,6 +42,7 @@ def _client_ip(request: Request) -> str | None:
 def create_order(
     body: CreateOrderRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> CreateOrderResponse:
     log_skus = [(line.product_id, line.offer_qty) for line in body.items]
@@ -205,26 +205,9 @@ def create_order(
             total_sar=subtotal + upsell_total,
             lines=sheet_lines,
         )
-        outcome, sheet_err = send_google_sheet_webhook(sheet_payload)
+        background_tasks.add_task(apply_sheet_delivery_to_order, order_id, sheet_payload)
     except Exception:
-        logger.exception("[orders] sheet_webhook_prepare_failed order_number=%s", order_number)
-        outcome, sheet_err = "failed", "sheet_payload_error"
-
-    persisted = db.get(Order, order_id)
-    if persisted is not None:
-        if outcome == "ok":
-            persisted.sheet_sent_at = datetime.now(UTC)
-            persisted.sheet_error = None
-        elif outcome == "failed":
-            persisted.sheet_error = (sheet_err or "unknown")[:4000]
-        elif outcome == "skipped":
-            # Order is in Postgres but Sheet did not run (missing URL) — visible for ops/COD follow-up.
-            persisted.sheet_error = (sheet_err or "sheet_skipped")[:4000]
-        try:
-            db.commit()
-        except SQLAlchemyError:
-            logger.exception("[orders] sheet_meta_commit_failed order_id=%s", order_id)
-            db.rollback()
+        logger.exception("[orders] sheet_row_build_failed order_number=%s", order_number)
 
     logger.info(
         "[orders] SAVED_OK order_number=%s order_id=%s total_sar=%s line_items=%s accepted_upsell=%s",

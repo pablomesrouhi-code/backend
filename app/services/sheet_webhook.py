@@ -5,12 +5,16 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.database import SessionLocal, get_engine
+from app.models.order_models import Order
 from app.services.catalog import resolve_product, resolve_sku
 
 logger = logging.getLogger(__name__)
@@ -116,3 +120,47 @@ def send_google_sheet_webhook(
         break
 
     return "failed", last_err or "unknown"
+
+
+def apply_sheet_delivery_to_order(
+    order_id: uuid.UUID, payload: dict[str, str | int]
+) -> None:
+    """POST to Apps Script **after** the API response returns (avoid blocking checkout).
+
+    Persists webhook outcome onto ``Order.sheet_*`` using a fresh session.
+    """
+
+    try:
+        outcome, sheet_err = send_google_sheet_webhook(payload)
+    except Exception:
+        logger.exception(
+            "[sheet_webhook] background send failed order_id=%s", order_id
+        )
+        outcome, sheet_err = "failed", "sheet_payload_error"
+
+    try:
+        get_engine()
+    except RuntimeError:
+        logger.warning("[sheet_webhook] skip_sheet_meta_save no engine order_id=%s", order_id)
+        return
+
+    db = SessionLocal()
+    try:
+        persisted = db.get(Order, order_id)
+        if persisted is None:
+            logger.warning("[sheet_webhook] order_missing_for_sheet_meta order_id=%s", order_id)
+            return
+        if outcome == "ok":
+            persisted.sheet_sent_at = datetime.now(UTC)
+            persisted.sheet_error = None
+        elif outcome == "failed":
+            persisted.sheet_error = (sheet_err or "unknown")[:4000]
+        elif outcome == "skipped":
+            persisted.sheet_error = (sheet_err or "sheet_skipped")[:4000]
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            logger.exception("[sheet_webhook] sheet_meta_commit_failed order_id=%s", order_id)
+            db.rollback()
+    finally:
+        db.close()
