@@ -34,14 +34,17 @@ def _env_falsy(name: str) -> bool:
 
 
 def _background_migrate() -> bool:
-    """When True, run Alembic after the app is accepting traffic (avoids 502 while DB is slow/down)."""
+    """When True, run Alembic after the app is accepting traffic (avoids 502 while DB is slow/down).
+
+    Default is **background** when unset so EasyPanel still gets a healthy /health even if APP_ENV
+    is missing. Opt out with BACKGROUND_AUTO_MIGRATE=false (blocking migrations before traffic).
+    """
     raw = os.getenv("BACKGROUND_AUTO_MIGRATE", "").strip()
     if _env_truthy("BACKGROUND_AUTO_MIGRATE"):
         return True
     if raw and _env_falsy("BACKGROUND_AUTO_MIGRATE"):
         return False
-    env = os.getenv("APP_ENV", "").strip().lower()
-    return env in ("production", "prod")
+    return True
 
 
 @asynccontextmanager
