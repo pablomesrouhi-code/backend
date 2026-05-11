@@ -77,10 +77,16 @@ async def lifespan(app: FastAPI):
             else:
                 raise
     env = os.getenv("APP_ENV", "").strip().lower()
-    if env in ("production", "prod") and not _webhook_url_from_env():
-        logging.warning(
-            "[sheet] GOOGLE_SHEET_WEBHOOK_URL فارغ في الإنتاج — الطلبات تُحفظ في Postgres لكن لا تُرسل إلى Google Sheet حتى تضيف الرابط وتعيد تشغيل الـ API"
-        )
+    wh = _webhook_url_from_env()
+    if env in ("production", "prod"):
+        if wh:
+            tail = wh[-44:] if len(wh) > 44 else wh
+            logging.info("[sheet] Apps Script webhook configured — …%s", tail)
+        else:
+            logging.warning(
+                "[sheet] GOOGLE_SHEET_WEBHOOK_URL أو SHEET_WEBHOOK_URL فارغ في الإنتاج — الطلبات تُحفظ في Postgres "
+                "لكن لا تُرسل إلى Google Sheet. أضِف الرابط /exec في متغيرات **نفس خدمة الـ API** ثم أعد التشغيل."
+            )
     yield
 
 

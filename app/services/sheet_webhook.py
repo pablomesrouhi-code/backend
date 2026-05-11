@@ -82,13 +82,23 @@ def _sheet_retries() -> int:
         return 5
 
 
+def _strip_panel_wrapped_url(raw: str) -> str:
+    s = (raw or "").strip()
+    if s.startswith("\ufeff"):
+        s = s.lstrip("\ufeff").strip()
+    while len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        s = s[1:-1].strip()
+    return s.rstrip("/")
+
+
 def _webhook_url_from_env() -> str:
-    raw = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
-    if raw.startswith("\ufeff"):
-        raw = raw.lstrip("\ufeff").strip()
-    while len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
-        raw = raw[1:-1].strip()
-    return raw.rstrip("/")
+    """``GOOGLE_SHEET_WEBHOOK_URL`` or shorter alias ``SHEET_WEBHOOK_URL`` (some panels truncate long keys)."""
+
+    for key in ("GOOGLE_SHEET_WEBHOOK_URL", "SHEET_WEBHOOK_URL"):
+        url = _strip_panel_wrapped_url(os.getenv(key) or "")
+        if url:
+            return url
+    return ""
 
 
 def send_google_sheet_webhook(
