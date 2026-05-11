@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 import os
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
-from app.database import get_engine
-from app.services.sheet_webhook import _webhook_url_from_env
+from app.database import SessionLocal, get_engine
+from app.models.order_models import Order
+from app.services.sheet_webhook import (
+    _webhook_url_from_env,
+    rebuild_sheet_payload_from_persisted_order,
+    send_google_sheet_webhook,
+)
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
@@ -54,6 +63,73 @@ class SheetWebhookDiagnostics(BaseModel):
     )
     get_probe_preview: str
     recent_orders_sheet: list[RecentOrderSheetRow]
+
+
+class ResendSheetRequest(BaseModel):
+    """Either ``order_id`` (UUID) or ``order_number`` — loads order from Postgres and POSTs row to Sheets."""
+
+    order_number: str | None = None
+    order_id: str | None = None
+
+
+@router.post("/resend-sheet-row")
+def resend_sheet_row_manual(
+    body: ResendSheetRequest,
+    token: str | None = Query(None, alias="token"),
+) -> dict[str, Any]:
+    """Rebuild sheet JSON from DB and POST again (fixes orders stuck in Postgres only). Requires token."""
+    _require_token(token)
+    oid_raw = (body.order_id or "").strip()
+    on_raw = (body.order_number or "").strip()
+    if not oid_raw and not on_raw:
+        raise HTTPException(status_code=400, detail="Provide order_id or order_number")
+
+    try:
+        get_engine()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+    db = SessionLocal()
+    try:
+        stmt = select(Order).options(selectinload(Order.items))
+        if oid_raw:
+            try:
+                oid = uuid.UUID(oid_raw)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="invalid order_id UUID") from e
+            order = db.execute(stmt.where(Order.id == oid)).scalar_one_or_none()
+        else:
+            order = db.execute(stmt.where(Order.order_number == on_raw)).scalar_one_or_none()
+
+        if order is None:
+            raise HTTPException(status_code=404, detail="order not found")
+
+        payload = rebuild_sheet_payload_from_persisted_order(order)
+        outcome, sheet_err = send_google_sheet_webhook(payload)
+
+        if outcome == "ok":
+            order.sheet_sent_at = datetime.now(UTC)
+            order.sheet_error = None
+        elif outcome == "failed":
+            order.sheet_error = (sheet_err or "unknown")[:4000]
+        else:
+            order.sheet_error = (sheet_err or "no_webhook_url")[:4000]
+
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(status_code=503, detail="failed to persist sheet_* after resend")
+
+        return {
+            "ok": outcome == "ok",
+            "outcome": outcome,
+            "detail": sheet_err,
+            "order_number": order.order_number,
+            "order_id": str(order.id),
+        }
+    finally:
+        db.close()
 
 
 @router.get("/sheet-webhook", response_model=SheetWebhookDiagnostics)

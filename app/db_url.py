@@ -11,10 +11,12 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 def database_url_raw_from_env() -> str:
-    """Read ``DATABASE_URL``; strip whitespace and outer ``"`` / ``'`` when panels YAML-wrap the value."""
+    """Read ``DATABASE_URL``; strip whitespace/BOM and outer ``"`` / ``'`` when panels wrap the value."""
 
     raw = (os.getenv("DATABASE_URL") or "").strip()
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+    if raw.startswith("\ufeff"):
+        raw = raw.lstrip("\ufeff").strip()
+    while len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
         raw = raw[1:-1].strip()
     return raw
 

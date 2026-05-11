@@ -207,8 +207,17 @@ def create_order(
             lines=sheet_lines,
         )
         background_tasks.add_task(apply_sheet_delivery_to_order, order_id, sheet_payload)
+        logger.info("[orders] SHEET_ENQUEUED order_number=%s order_id=%s", order_number, order_id)
     except Exception:
         logger.exception("[orders] sheet_row_build_failed order_number=%s", order_number)
+        try:
+            o_row = db.get(Order, order_id)
+            if o_row is not None:
+                o_row.sheet_error = "sheet_row_build_failed_see_api_logs"
+                db.commit()
+        except SQLAlchemyError:
+            logger.exception("[orders] persist_sheet_build_error_failed order_id=%s", order_id)
+            db.rollback()
 
     logger.info(
         "[orders] SAVED_OK order_number=%s order_id=%s total_sar=%s line_items=%s accepted_upsell=%s",

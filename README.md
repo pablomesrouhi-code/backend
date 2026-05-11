@@ -79,6 +79,7 @@ After each successful `POST /api/orders`, the API POSTs one JSON row in the back
 
 - Retries run on transient errors; each order persists **`sheet_error`** / **`sheet_sent_at`** (see `orders` columns). Typical failures: webhook URL typo, deployment not **Anyone**, **standalone script** without **`SPREADSHEET_ID`**, or Google returning HTML (**`non_json_response`**) instead of **`{"ok":true}`**.
 - Diagnostics (set **`DATABASE_DIAGNOSTICS_TOKEN`** first): **`GET /api/diagnostics/sheet-webhook?token=…`** — GET-probes the URL and lists recent orders including **`sheet_error`**.
+- **Replay** a Postgres order to the Sheet: **`POST /api/diagnostics/resend-sheet-row?token=…`** with JSON body **`{"order_number":"NBT-…"}`** or **`{"order_id":"uuid"}`**.
 
 ## EasyPanel — خضرة الحاوية + الشيك أوت
 

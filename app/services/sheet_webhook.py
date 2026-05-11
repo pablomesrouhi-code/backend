@@ -60,6 +60,19 @@ def build_sheet_row(
     }
 
 
+def rebuild_sheet_payload_from_persisted_order(order: Order) -> dict[str, str | int]:
+    """Rebuild POST JSON from DB (manual resend / diagnostics). Lines follow saved ``order_items`` order."""
+
+    lines = [(it.product_id.strip().lower(), it.offer_qty) for it in order.items]
+    return build_sheet_row(
+        customer_name=order.customer_name,
+        phone_digits=order.phone_digits,
+        order_number=order.order_number,
+        total_sar=float(order.total_sar),
+        lines=lines,
+    )
+
+
 def _sheet_retries() -> int:
     raw = os.getenv("GOOGLE_SHEET_WEBHOOK_RETRIES", "5").strip()
     try:
@@ -71,7 +84,9 @@ def _sheet_retries() -> int:
 
 def _webhook_url_from_env() -> str:
     raw = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+    if raw.startswith("\ufeff"):
+        raw = raw.lstrip("\ufeff").strip()
+    while len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
         raw = raw[1:-1].strip()
     return raw.rstrip("/")
 
@@ -177,6 +192,12 @@ def apply_sheet_delivery_to_order(
 
     Persists webhook outcome onto ``Order.sheet_*`` using a fresh session.
     """
+
+    logger.info(
+        "[sheet_webhook] SEND_START order_uuid=%s order_number=%s",
+        order_id,
+        payload.get("order_id"),
+    )
 
     try:
         outcome, sheet_err = send_google_sheet_webhook(payload)
