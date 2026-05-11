@@ -21,6 +21,7 @@ from app.db_migrate import run_upgrade_head
 from app.routers import capi as capi_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
+from app.services.sheet_webhook import _webhook_url_from_env
 
 logging.basicConfig(level=logging.INFO)
 
@@ -76,8 +77,7 @@ async def lifespan(app: FastAPI):
             else:
                 raise
     env = os.getenv("APP_ENV", "").strip().lower()
-    sheet_url = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
-    if env in ("production", "prod") and not sheet_url:
+    if env in ("production", "prod") and not _webhook_url_from_env():
         logging.warning(
             "[sheet] GOOGLE_SHEET_WEBHOOK_URL فارغ في الإنتاج — الطلبات تُحفظ في Postgres لكن لا تُرسل إلى Google Sheet حتى تضيف الرابط وتعيد تشغيل الـ API"
         )

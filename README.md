@@ -75,7 +75,10 @@ Until the origin returns **200** JSON for `/health`, public `https://api.nabtala
 
 ## Google Sheet (orders row)
 
-After each successful `POST /api/orders`, the API can POST one JSON row to **`GOOGLE_SHEET_WEBHOOK_URL`** (Google Apps Script web app). Reference script: **`backend/sheet/google-apps-script-webhook.js`** — paste it into the spreadsheet’s Apps Script editor, deploy as web app, put the URL in `.env`.
+After each successful `POST /api/orders`, the API POSTs one JSON row in the background to **`GOOGLE_SHEET_WEBHOOK_URL`** (Google Apps Script web app). Reference script: **`backend/sheet/google-apps-script-webhook.js`** — open **from inside the spreadsheet** (Extensions → Apps Script), paste, **Deploy → New deployment → Web app**, **Anyone** access, paste `/exec` into EasyPanel env.
+
+- Retries run on transient errors; each order persists **`sheet_error`** / **`sheet_sent_at`** (see `orders` columns). Typical failures: webhook URL typo, deployment not **Anyone**, **standalone script** without **`SPREADSHEET_ID`**, or Google returning HTML (**`non_json_response`**) instead of **`{"ok":true}`**.
+- Diagnostics (set **`DATABASE_DIAGNOSTICS_TOKEN`** first): **`GET /api/diagnostics/sheet-webhook?token=…`** — GET-probes the URL and lists recent orders including **`sheet_error`**.
 
 ## EasyPanel — خضرة الحاوية + الشيك أوت
 

@@ -7,26 +7,47 @@
  *
  * If your script is STANDALONE (created at script.google.com, not from the Sheet):
  * set SPREADSHEET_ID below to the ID from your Sheet URL (.../d/THIS_PART/edit).
+ *
+ * SHEET_TAB_NAME: name of the tab (e.g. Feuille 1), or '' to append to the first tab.
  */
 var SPREADSHEET_ID = ''; // e.g. '1AbCdEfGhIjKlMnOpQrStUvWxYz' or leave '' if bound to sheet
+var SHEET_TAB_NAME = ''; // e.g. 'Orders' — must match sheet tab exactly
 
 /**
  * Sheet row 1 (headers), same order:
  * DATE | ORDERID | COUNTRY | NAME | PHONE | PRODUCT | SKU | quantité | TOTAL PRICE | CURRENCY | STATUS
  */
 
-function getTargetSheet_() {
-  if (SPREADSHEET_ID && String(SPREADSHEET_ID).trim().length > 0) {
-    return SpreadsheetApp.openById(String(SPREADSHEET_ID).trim()).getSheets()[0];
+function getSpreadsheet_() {
+  var sid = SPREADSHEET_ID ? String(SPREADSHEET_ID).trim() : '';
+  if (sid.length > 0) {
+    return SpreadsheetApp.openById(sid);
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) {
     throw new Error(
-      'SpreadsheetApp.getActiveSpreadsheet() is null — open the script FROM the Sheet ' +
-        '(Extensions → Apps Script) OR set SPREADSHEET_ID at top of this file.'
+      'No spreadsheet: standalone project must set SPREADSHEET_ID from the Sheet URL (…/d/ID/edit), ' +
+        'OR create the script with Extensions → Apps Script from inside that Sheet.'
     );
   }
-  return ss.getSheets()[0];
+  return ss;
+}
+
+function getTargetSheet_() {
+  var ss = getSpreadsheet_();
+  var tab = SHEET_TAB_NAME ? String(SHEET_TAB_NAME).trim() : '';
+  if (tab.length > 0) {
+    var sh = ss.getSheetByName(tab);
+    if (!sh) {
+      throw new Error('Sheet tab not found: "' + tab + '" — check SHEET_TAB_NAME matches exactly.');
+    }
+    return sh;
+  }
+  var sheets = ss.getSheets();
+  if (!sheets || sheets.length === 0) {
+    throw new Error('Spreadsheet has no sheets.');
+  }
+  return sheets[0];
 }
 
 function doGet() {

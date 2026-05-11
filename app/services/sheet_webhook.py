@@ -69,21 +69,35 @@ def _sheet_retries() -> int:
         return 5
 
 
+def _webhook_url_from_env() -> str:
+    raw = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        raw = raw[1:-1].strip()
+    return raw.rstrip("/")
+
+
 def send_google_sheet_webhook(
     payload: dict[str, str | int],
 ) -> tuple[Literal["ok", "skipped", "failed"], str | None]:
     """POST JSON to Apps Script; retries on transient errors so orders reach the Sheet."""
 
-    url = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
+    url = _webhook_url_from_env()
     if not url:
         return "skipped", "no_webhook_url"
+
+    headers = {
+        "User-Agent": "NabtalaboBackend/1.0 (+sheet webhook; contact store tech)",
+        "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
+    }
 
     retries = _sheet_retries()
     last_err: str | None = None
 
     for attempt in range(retries):
         try:
-            resp = httpx.post(url, json=payload, timeout=25.0)
+            # Google Apps Script often returns redirects; POST must follow them or we never reach doPost().
+            with httpx.Client(timeout=25.0, follow_redirects=True) as client:
+                resp = client.post(url, json=payload, headers=headers)
         except Exception:
             last_err = "request_error"
             logger.warning(
