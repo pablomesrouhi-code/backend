@@ -241,5 +241,13 @@ def apply_sheet_delivery_to_order(
         except SQLAlchemyError:
             logger.exception("[sheet_webhook] sheet_meta_commit_failed order_id=%s", order_id)
             db.rollback()
+        else:
+            logger.info(
+                "[sheet_webhook] SEND_DONE order_uuid=%s order_number=%s outcome=%s detail=%s",
+                order_id,
+                payload.get("order_id"),
+                outcome,
+                (sheet_err[:200] if sheet_err else None),
+            )
     finally:
         db.close()

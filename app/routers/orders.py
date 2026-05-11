@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 
@@ -27,6 +28,12 @@ from app.services.pricing import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str | int]) -> None:
+    """Run sync sheet POST in a worker thread so it always runs after the HTTP response (reliable with ASGI)."""
+
+    await asyncio.to_thread(apply_sheet_delivery_to_order, order_id, payload)
 
 
 def _client_ip(request: Request) -> str | None:
@@ -206,7 +213,7 @@ def create_order(
             total_sar=subtotal + upsell_total,
             lines=sheet_lines,
         )
-        background_tasks.add_task(apply_sheet_delivery_to_order, order_id, sheet_payload)
+        background_tasks.add_task(_run_sheet_delivery_async, order_id, sheet_payload)
         logger.info("[orders] SHEET_ENQUEUED order_number=%s order_id=%s", order_number, order_id)
     except Exception:
         logger.exception("[orders] sheet_row_build_failed order_number=%s", order_number)
