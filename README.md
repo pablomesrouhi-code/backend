@@ -59,6 +59,20 @@ Product IDs: `rawnaq-c`, `khiffabiotic`, `laylmag`. Sum of `offer_qty` must be *
 
 Set **`CORS_ORIGINS`** (comma-separated) so the frontend domain can call this API from the browser.
 
+## Cloudflare — **502 Bad Gateway** on `https://api.nabtalabo.store/health`
+
+**502** means Cloudflare did **not** get a valid HTTP response from **your origin** (EasyPanel / the API container). This is **not** CORS and not fixed by frontend code alone.
+
+Check in order:
+
+1. **Backend container is running** (not crash-loop). Logs stuck on `alembic upgrade head` then restart → origin is **down** → **502**. Fix **`DATABASE_URL`**, deploy backend with **`connect_timeout`**, or temporarily **`SKIP_AUTO_MIGRATE=true`** + **`ALLOW_WEAK_START=true`** while you repair Postgres.
+2. **Traffic to the container uses port `8000`** (same as `Dockerfile`).
+3. **On the VPS / panel network:** `curl -sS http://127.0.0.1:8000/health` (or whatever internal URL the panel uses). If this fails → fix the panel/docker **before** blaming Cloudflare.
+4. **SSL mode** in Cloudflare (**SSL/TLS → Overview**): *Flexible* vs *Full (strict)* — wrong mode for how your origin listens often causes **522/525/502** symptoms; align with how EasyPanel terminates TLS.
+5. **Purge Cloudflare cache** after the origin is healthy.
+
+Until the origin returns **200** JSON for `/health`, public `https://api.nabtalabo.store/health` can keep showing **502**.
+
 ## Google Sheet (orders row)
 
 After each successful `POST /api/orders`, the API can POST one JSON row to **`GOOGLE_SHEET_WEBHOOK_URL`** (Google Apps Script web app). Reference script: **`backend/sheet/google-apps-script-webhook.js`** — paste it into the spreadsheet’s Apps Script editor, deploy as web app, put the URL in `.env`.
