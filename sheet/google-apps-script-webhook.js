@@ -1,18 +1,36 @@
 /**
  * NabtaLabo — append one order row from backend POST JSON.
  *
- * Deploy: Extensions → Apps Script → paste → Deploy → New deployment → Web app
- * Execute as: Me | Who has access: Anyone (or Anyone with link)
- * Put the deployment URL in backend env GOOGLE_SHEET_WEBHOOK_URL (no secret).
+ * Deploy: Extensions → Apps Script (from INSIDE the spreadsheet) → paste → Deploy → Web app
+ * Execute as: Me | Who has access: Anyone (with link) or Anyone
+ * Put the deployment URL in backend env GOOGLE_SHEET_WEBHOOK_URL ending in /exec
  *
- * Sheet row 1 (headers), same order as your CSV:
- * DATE | ORDERID | COUNTRY | NAME | PHONE | PRODUCT | SKU | quantité | TOTAL PRICE | CURRENCY | STATUS
- *
- * doGet: opening the /exec URL in a browser uses GET — without this, Google shows "doGet not found".
- * Orders still use POST from the backend only.
+ * If your script is STANDALONE (created at script.google.com, not from the Sheet):
+ * set SPREADSHEET_ID below to the ID from your Sheet URL (.../d/THIS_PART/edit).
  */
+var SPREADSHEET_ID = ''; // e.g. '1AbCdEfGhIjKlMnOpQrStUvWxYz' or leave '' if bound to sheet
+
+/**
+ * Sheet row 1 (headers), same order:
+ * DATE | ORDERID | COUNTRY | NAME | PHONE | PRODUCT | SKU | quantité | TOTAL PRICE | CURRENCY | STATUS
+ */
+
+function getTargetSheet_() {
+  if (SPREADSHEET_ID && String(SPREADSHEET_ID).trim().length > 0) {
+    return SpreadsheetApp.openById(String(SPREADSHEET_ID).trim()).getSheets()[0];
+  }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    throw new Error(
+      'SpreadsheetApp.getActiveSpreadsheet() is null — open the script FROM the Sheet ' +
+        '(Extensions → Apps Script) OR set SPREADSHEET_ID at top of this file.'
+    );
+  }
+  return ss.getSheets()[0];
+}
+
 function doGet() {
-  const out = ContentService.createTextOutput(
+  var out = ContentService.createTextOutput(
     JSON.stringify({
       ok: true,
       service: 'nabtalabo-sheet-webhook',
@@ -35,9 +53,7 @@ function doPost(e) {
   }
 
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheets()[0];
-
+    var sheet = getTargetSheet_();
     var status = data.status != null ? String(data.status) : '';
 
     sheet.appendRow([
@@ -64,8 +80,6 @@ function jsonResponse(obj, statusCode) {
   var out = ContentService.createTextOutput(JSON.stringify(obj));
   out.setMimeType(ContentService.MimeType.JSON);
   if (typeof statusCode === 'number') {
-    // Apps Script ignores HTTP status on TextOutput for simple web apps,
-    // but keep shape for readability if you migrate to OAuth / API Gateway.
     return out;
   }
   return out;

@@ -99,9 +99,43 @@ def send_google_sheet_webhook(
             return "failed", last_err
 
         if resp.is_success:
-            if attempt > 0:
-                logger.info("[sheet_webhook] ok after_retries=%s", attempt + 1)
-            return "ok", None
+            # Web apps often return HTTP 200 even when the script returns JSON { ok: false }.
+            try:
+                j = resp.json()
+            except Exception:
+                logger.warning(
+                    "[sheet_webhook] attempt %s/%s http_ok_non_json body=%s",
+                    attempt + 1,
+                    retries,
+                    (resp.text or "")[:400],
+                )
+                last_err = "non_json_response"
+                if attempt < retries - 1:
+                    time.sleep(min(8.0, 2**attempt))
+                    continue
+                return "failed", last_err
+
+            if isinstance(j, dict) and j.get("ok") is True:
+                if attempt > 0:
+                    logger.info("[sheet_webhook] ok after_retries=%s", attempt + 1)
+                return "ok", None
+
+            if isinstance(j, dict):
+                script_err = str(j.get("error") or j.get("detail") or "script_ok_false")[:400]
+                last_err = f"sheet_script:{script_err}"
+            else:
+                last_err = "unexpected_json"
+
+            logger.warning(
+                "[sheet_webhook] attempt %s/%s script_rejected json=%s",
+                attempt + 1,
+                retries,
+                str(j)[:500],
+            )
+            if attempt < retries - 1:
+                time.sleep(min(8.0, 2**attempt))
+                continue
+            return "failed", last_err
 
         code = resp.status_code
         last_err = f"http_{code}"
