@@ -16,7 +16,10 @@ router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
 class DatabaseDiagnostics(BaseModel):
     database_name: str
+    db_user: str
     orders_table_exists: bool
+    orders_insert_privilege: bool | None = None
+    orders_select_privilege: bool | None = None
     orders_total: int
     latest_created_at_iso: str | None
 
@@ -45,6 +48,7 @@ def database_diagnostic(token: str | None = Query(None, alias="token")) -> Any:
 
     with eng.connect() as conn:
         name = conn.execute(text("SELECT current_database()")).scalar_one()
+        db_user = str(conn.execute(text("SELECT CURRENT_USER")).scalar_one())
         exists = conn.execute(
             text(
                 "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
@@ -54,7 +58,25 @@ def database_diagnostic(token: str | None = Query(None, alias="token")) -> Any:
         ).scalar()
         orders_total = 0
         latest: str | None = None
+        insert_ok: bool | None = None
+        select_ok: bool | None = None
         if exists:
+            insert_ok = bool(
+                conn.execute(
+                    text(
+                        "SELECT has_table_privilege(CURRENT_USER, CAST(:tbl AS regclass), 'INSERT')"
+                    ),
+                    {"tbl": "public.orders"},
+                ).scalar_one()
+            )
+            select_ok = bool(
+                conn.execute(
+                    text(
+                        "SELECT has_table_privilege(CURRENT_USER, CAST(:tbl AS regclass), 'SELECT')"
+                    ),
+                    {"tbl": "public.orders"},
+                ).scalar_one()
+            )
             orders_total = int(
                 conn.execute(text("SELECT COUNT(*)::bigint FROM orders")).scalar_one()
             )
@@ -67,7 +89,10 @@ def database_diagnostic(token: str | None = Query(None, alias="token")) -> Any:
 
         return DatabaseDiagnostics(
             database_name=str(name),
+            db_user=db_user,
             orders_table_exists=bool(exists),
+            orders_insert_privilege=insert_ok,
+            orders_select_privilege=select_ok,
             orders_total=orders_total,
             latest_created_at_iso=latest,
         )
