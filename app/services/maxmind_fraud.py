@@ -48,13 +48,21 @@ def _env_bool(key: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
+# Match `TEST_PHONES` in `frontend/components/checkout/CheckoutPopup.tsx` — always bypass MinFraud
+# for this number so staging/prod works even if `ORDER_TEST_PHONE_WHITELIST` was not set in the panel.
+_DEFAULT_TEST_LOCAL_PHONES = frozenset({"055000000"})
+
+
 def _parse_whitelist() -> set[str]:
     raw = os.getenv("ORDER_TEST_PHONE_WHITELIST", "")
     return {p.strip() for p in raw.split(",") if p.strip()}
 
 
 def is_test_phone_whitelisted(phone_local: str) -> bool:
-    return phone_local.strip() in _parse_whitelist()
+    pl = phone_local.strip()
+    if pl in _DEFAULT_TEST_LOCAL_PHONES:
+        return True
+    return pl in _parse_whitelist()
 
 
 def _dig(obj: Any, *keys: str) -> Any:
