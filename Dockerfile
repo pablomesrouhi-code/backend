@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY alembic.ini .
 COPY migrations ./migrations
 COPY app ./app
+# Fail Docker build immediately if upstream deploy missed new modules (easier than a crash-loop in prod).
+RUN test -f app/log_safe.py
 
 EXPOSE 8000
 
