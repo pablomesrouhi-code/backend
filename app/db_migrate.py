@@ -6,6 +6,8 @@ import logging
 import os
 from pathlib import Path
 
+from app.db_url import database_url_raw_from_env
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,7 +17,7 @@ def run_upgrade_head() -> None:
         logger.info("SKIP_AUTO_MIGRATE is set — skipping database migrations.")
         return
 
-    if not os.getenv("DATABASE_URL", "").strip():
+    if not database_url_raw_from_env():
         logger.warning("DATABASE_URL is not set — skipping database migrations.")
         return
 

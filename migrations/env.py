@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -12,7 +11,7 @@ from sqlalchemy import create_engine, pool
 load_dotenv()
 
 from app.database import Base  # noqa: E402
-from app.db_url import normalize_database_url  # noqa: E402
+from app.db_url import database_url_raw_from_env, normalize_database_url  # noqa: E402
 from app.models import order_models  # noqa: F401, E402
 
 config = context.config
@@ -24,7 +23,7 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    raw = os.getenv("DATABASE_URL", "").strip()
+    raw = database_url_raw_from_env()
     if not raw:
         raise RuntimeError("DATABASE_URL must be set to run migrations.")
     return normalize_database_url(raw)

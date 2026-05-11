@@ -10,9 +10,10 @@ load_dotenv()
 
 import app.models  # noqa: F401 — register ORM metadata & configure engine when DATABASE_URL is set
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from app.cors_config import cors_allowed_origins
 from app.db_migrate import run_upgrade_head
@@ -57,6 +58,32 @@ class HealthResponse(BaseModel):
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+    return HealthResponse()
+
+
+@app.get("/ready", response_model=HealthResponse)
+def ready() -> HealthResponse:
+    """Postgres reachable (use after deploy); /health stays cheap for probes."""
+    logger = logging.getLogger(__name__)
+    try:
+        from app.database import get_engine
+
+        eng = get_engine()
+    except RuntimeError:
+        logger.warning("[ready] DATABASE_URL missing — Postgres routes will 503")
+        raise HTTPException(
+            status_code=503,
+            detail="DATABASE_URL not set — set internal Postgres URL in backend env",
+        ) from None
+    try:
+        with eng.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("[ready] database connection failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Cannot reach Postgres — check DATABASE_URL host, DB name nabtalabo, network",
+        ) from None
     return HealthResponse()
 
 
