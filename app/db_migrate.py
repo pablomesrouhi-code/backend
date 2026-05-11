@@ -5,10 +5,35 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from app.db_url import database_url_raw_from_env
+from app.db_url import database_url_raw_from_env, normalize_database_url
 
 logger = logging.getLogger(__name__)
+
+
+def _migration_log_target() -> None:
+    """Log where Alembic will connect (no password) — helps diagnose hang vs wrong host."""
+    raw = database_url_raw_from_env()
+    if not raw:
+        return
+    try:
+        url = normalize_database_url(raw)
+        u = urlsplit(url)
+        host = u.hostname or "(missing)"
+        port = u.port or 5432
+        dbname = (u.path or "/").lstrip("/") or "?"
+        q = (u.query or "").lower()
+        has_ct = "connect_timeout" in q
+        logger.info(
+            "Alembic will connect: host=%s port=%s database=%s connect_timeout_in_url=%s",
+            host,
+            port,
+            dbname,
+            "yes" if has_ct else "no",
+        )
+    except Exception:
+        logger.info("Alembic: could not parse DATABASE_URL for startup log")
 
 
 def run_upgrade_head() -> None:
@@ -31,6 +56,7 @@ def run_upgrade_head() -> None:
         return
 
     cfg = Config(str(ini_path))
+    _migration_log_target()
     logger.info("Applying database migrations (alembic upgrade head)...")
     try:
         command.upgrade(cfg, "head")
