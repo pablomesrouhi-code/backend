@@ -63,9 +63,19 @@ Set **`CORS_ORIGINS`** (comma-separated) so the frontend domain can call this AP
 
 After each successful `POST /api/orders`, the API can POST one JSON row to **`GOOGLE_SHEET_WEBHOOK_URL`** (Google Apps Script web app). Reference script: **`backend/sheet/google-apps-script-webhook.js`** — paste it into the spreadsheet’s Apps Script editor, deploy as web app, put the URL in `.env`.
 
+## EasyPanel — خضرة الحاوية + الشيك أوت
+
+1. **Health check URL** داخل خدمة الـ API: استعمل **`/health`** أو **`/live`** أو **`/healthz`** (كلها `{"ok":true}` بلا فحص قاعدة). **لا تستعمل `/ready`** إلا إذا Postgres + جدول `orders` جاهزين.
+2. **Port** في التعريف والترافيك: **8000** (مثل `Dockerfile`).
+3. إذا كان الإقلاع يتوقّف ولّا عدّادك **صفر**: راجع لوغ الدور — غالب **`Alembic upgrade head failed`**.
+   - أصلّح **`DATABASE_URL`**؛ أو **`SKIP_AUTO_MIGRATE=true`** مؤقتًا للتشخيص؛ أو **`ALLOW_WEAK_START=true`** لتشغيل الـ API رغم فشل المهاجرة (مؤقت — أصلّح DB بعدها).
+4. إذا اللوحة مضبوطة على فحص `/ready` وما عندكش DB ولّ ما بغيتش ضغط صارم: **`READINESS_LITE=true`**.
+
 ## Health
 
-`GET /health` → `{"ok": true}`
+- `GET /health` → `{"ok": true}` (مُفضّل لـ EasyPanel)
+- `GET /healthz` و `GET /live` → نفس الرد
+- `GET /ready` → يفحص Postgres (أو وضع `READINESS_LITE`)
 
 ## Status
 

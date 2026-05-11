@@ -22,7 +22,11 @@ SessionLocal = sessionmaker(autoflush=False, autocommit=False, expire_on_commit=
 
 
 def configure_database() -> None:
-    """Bind engine when DATABASE_URL is present (no-op otherwise)."""
+    """Bind engine when DATABASE_URL is present (no-op otherwise).
+
+    Never raises: a bad URL must not prevent the process from starting (EasyPanel /health probes).
+    """
+
     global _engine
     raw = database_url_raw_from_env()
     if not raw:
@@ -31,9 +35,15 @@ def configure_database() -> None:
         )
         return
     url = normalize_database_url(raw)
-    _engine = create_engine(url, pool_pre_ping=True)
-    SessionLocal.configure(bind=_engine)
-    logger.info("[db] SQLAlchemy engine ready — %s", summarize_database_url(raw))
+    try:
+        _engine = create_engine(url, pool_pre_ping=True)
+        SessionLocal.configure(bind=_engine)
+        logger.info("[db] SQLAlchemy engine ready — %s", summarize_database_url(raw))
+    except Exception:
+        logger.exception(
+            "[db] create_engine failed — fix DATABASE_URL; Postgres routes will 503 until then."
+        )
+        _engine = None
 
 
 configure_database()

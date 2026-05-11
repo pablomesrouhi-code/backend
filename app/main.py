@@ -27,7 +27,16 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Apply Alembic migrations to head before serving (see app/db_migrate.py)."""
-    run_upgrade_head()
+    weak = os.getenv("ALLOW_WEAK_START", "").strip().lower() in ("1", "true", "yes")
+    try:
+        run_upgrade_head()
+    except Exception:
+        if weak:
+            logging.exception(
+                "[startup] Alembic failed but ALLOW_WEAK_START=true — API still starts; fix DATABASE_URL / migrations."
+            )
+        else:
+            raise
     env = os.getenv("APP_ENV", "").strip().lower()
     sheet_url = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
     if env in ("production", "prod") and not sheet_url:
@@ -60,6 +69,18 @@ class HealthResponse(BaseModel):
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+    return HealthResponse()
+
+
+@app.get("/healthz", response_model=HealthResponse)
+def healthz() -> HealthResponse:
+    """Alias for platforms that expect /healthz (same as /health)."""
+    return HealthResponse()
+
+
+@app.get("/live", response_model=HealthResponse)
+def live() -> HealthResponse:
+    """Liveness probe — process is up; does not check Postgres."""
     return HealthResponse()
 
 
