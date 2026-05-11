@@ -63,10 +63,35 @@ def health() -> HealthResponse:
     return HealthResponse()
 
 
+def _readiness_lite() -> bool:
+    """Panels that probe `/ready` but you skip Postgres: set READINESS_LITE=true (EasyPanel green)."""
+    return os.getenv("READINESS_LITE", "").strip().lower() in ("1", "true", "yes")
+
+
 @app.get("/ready", response_model=HealthResponse)
 def ready() -> HealthResponse:
-    """Postgres reachable (use after deploy); /health stays cheap for probes."""
+    """Postgres check. Use `/health` for process-only probes. Set READINESS_LITE=true to skip DB when unused."""
     logger = logging.getLogger(__name__)
+    if _readiness_lite():
+        try:
+            from app.database import get_engine
+
+            eng = get_engine()
+        except RuntimeError:
+            logger.info("[ready] READINESS_LITE: no DATABASE_URL — probe ok")
+            return HealthResponse()
+        try:
+            with eng.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("[ready] READINESS_LITE: SELECT 1 ok (orders table not checked)")
+            return HealthResponse()
+        except Exception:
+            logger.exception("[ready] READINESS_LITE: database unreachable")
+            raise HTTPException(
+                status_code=503,
+                detail="READINESS_LITE set but cannot run SELECT 1 — fix DATABASE_URL",
+            ) from None
+
     try:
         from app.database import get_engine
 
