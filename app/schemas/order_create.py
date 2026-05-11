@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -17,6 +19,10 @@ class CreateOrderRequest(BaseModel):
     source_page: str | None = Field(default=None, max_length=2048)
     client_event_id: str | None = None
     purchase_event_id: str | None = None
+    payment_method: Literal["cash_on_delivery"] = Field(
+        default="cash_on_delivery",
+        description="Storefront is COD-only; field reserved for future gateways.",
+    )
 
 
 class CreateOrderResponse(BaseModel):

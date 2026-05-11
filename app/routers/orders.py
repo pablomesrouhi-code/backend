@@ -47,11 +47,12 @@ def create_order(
 ) -> CreateOrderResponse:
     log_skus = [(line.product_id, line.offer_qty) for line in body.items]
     logger.info(
-        "[orders] POST /api/orders attempt items=%s total_offer_qty_sum=%s accepted_upsell=%s phone=%s",
+        "[orders] POST /api/orders attempt items=%s total_offer_qty_sum=%s accepted_upsell=%s phone=%s payment_method=%s",
         log_skus,
         sum(line.offer_qty for line in body.items),
         body.accepted_upsell,
         mask_phone_sa(body.phone),
+        body.payment_method,
     )
 
     quantities: list[int] = []
