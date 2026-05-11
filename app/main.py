@@ -18,6 +18,7 @@ from sqlalchemy import text
 from app.cors_config import cors_allowed_origins
 from app.db_migrate import run_upgrade_head
 from app.routers import capi as capi_router
+from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
 
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +51,7 @@ app.add_middleware(
 
 app.include_router(capi_router.router, prefix="/capi", tags=["capi"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
+app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"])
 
 
 class HealthResponse(BaseModel):
@@ -78,6 +80,24 @@ def ready() -> HealthResponse:
     try:
         with eng.connect() as conn:
             conn.execute(text("SELECT 1"))
+            orders_ok = conn.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema = :s AND table_name = :t)"
+                ),
+                {"s": "public", "t": "orders"},
+            ).scalar()
+        if not orders_ok:
+            logger.error("[ready] connected but public.orders table is missing — run alembic on this DATABASE_URL")
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Postgres reachable but orders table missing — migrations not applied "
+                    "(alembic upgrade head) or wrong database name vs PgWeb"
+                ),
+            )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("[ready] database connection failed")
         raise HTTPException(
