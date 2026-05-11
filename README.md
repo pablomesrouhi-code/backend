@@ -65,7 +65,7 @@ Set **`CORS_ORIGINS`** (comma-separated) so the frontend domain can call this AP
 
 Check in order:
 
-1. **Backend container is running** (not crash-loop). Logs stuck on `alembic upgrade head` then restart → origin is **down** → **502**. Fix **`DATABASE_URL`**, deploy backend with **`connect_timeout`**, or temporarily **`SKIP_AUTO_MIGRATE=true`** + **`ALLOW_WEAK_START=true`** while you repair Postgres.
+1. **Backend container is running** (not crash-loop). With **`APP_ENV=production`**, migrations run **in the background** by default so **`/health` returns immediately** (reduces Cloudflare **502** when Postgres is slow). If you still see a boot loop, fix **`DATABASE_URL`**, use **`connect_timeout`**, or temporarily **`SKIP_AUTO_MIGRATE=true`** / **`ALLOW_WEAK_START=true`** while you repair Postgres. To restore **blocking** migrations: **`BACKGROUND_AUTO_MIGRATE=false`**.
 2. **Traffic to the container uses port `8000`** (same as `Dockerfile`).
 3. **On the VPS / panel network:** `curl -sS http://127.0.0.1:8000/health` (or whatever internal URL the panel uses). If this fails → fix the panel/docker **before** blaming Cloudflare.
 4. **SSL mode** in Cloudflare (**SSL/TLS → Overview**): *Flexible* vs *Full (strict)* — wrong mode for how your origin listens often causes **522/525/502** symptoms; align with how EasyPanel terminates TLS.

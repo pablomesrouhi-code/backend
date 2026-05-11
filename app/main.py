@@ -1,5 +1,6 @@
 """NabtaLabo FastAPI entrypoint."""
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -24,19 +25,53 @@ from app.routers import orders as orders_router
 logging.basicConfig(level=logging.INFO)
 
 
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def _env_falsy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("0", "false", "no")
+
+
+def _background_migrate() -> bool:
+    """When True, run Alembic after the app is accepting traffic (avoids 502 while DB is slow/down)."""
+    raw = os.getenv("BACKGROUND_AUTO_MIGRATE", "").strip()
+    if _env_truthy("BACKGROUND_AUTO_MIGRATE"):
+        return True
+    if raw and _env_falsy("BACKGROUND_AUTO_MIGRATE"):
+        return False
+    env = os.getenv("APP_ENV", "").strip().lower()
+    return env in ("production", "prod")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Apply Alembic migrations to head before serving (see app/db_migrate.py)."""
-    weak = os.getenv("ALLOW_WEAK_START", "").strip().lower() in ("1", "true", "yes")
-    try:
-        run_upgrade_head()
-    except Exception:
-        if weak:
+    """Apply Alembic migrations (blocking or background — see BACKGROUND_AUTO_MIGRATE)."""
+    weak = _env_truthy("ALLOW_WEAK_START")
+
+    async def _migrate_in_thread() -> None:
+        try:
+            await asyncio.to_thread(run_upgrade_head)
+        except Exception:
             logging.exception(
-                "[startup] Alembic failed but ALLOW_WEAK_START=true — API still starts; fix DATABASE_URL / migrations."
+                "[startup] Alembic failed (background) — API is up; fix DATABASE_URL or run migrations manually."
             )
-        else:
-            raise
+
+    if _background_migrate():
+        logging.info(
+            "[startup] BACKGROUND_AUTO_MIGRATE — serving traffic immediately; migrations run in background."
+        )
+        asyncio.create_task(_migrate_in_thread())
+    else:
+        try:
+            run_upgrade_head()
+        except Exception:
+            if weak:
+                logging.exception(
+                    "[startup] Alembic failed but ALLOW_WEAK_START=true — API still starts; fix DATABASE_URL / migrations."
+                )
+            else:
+                raise
     env = os.getenv("APP_ENV", "").strip().lower()
     sheet_url = (os.getenv("GOOGLE_SHEET_WEBHOOK_URL") or "").strip()
     if env in ("production", "prod") and not sheet_url:
