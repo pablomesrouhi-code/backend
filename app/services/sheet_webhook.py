@@ -15,11 +15,25 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import SessionLocal, get_engine
 from app.models.order_models import Order
-from app.services.catalog import resolve_product, resolve_sku
+from app.services.catalog import resolve_product, resolve_sku, sheet_product_labels
 
 logger = logging.getLogger(__name__)
 
 Ryadh = ZoneInfo("Asia/Riyadh")
+
+
+def sheet_order_public_id(internal_order_number: str) -> str:
+    """Public ORDERID for Sheets (``SHEET_ORDER_ID_PREFIX``). Default converts ``nabta-…`` → ``nama-…``."""
+
+    inn = internal_order_number.strip()
+    pref = (os.getenv("SHEET_ORDER_ID_PREFIX") or "nama").strip().lower()
+    if not pref:
+        return inn
+    if inn.startswith("nabta-"):
+        return pref + inn[5:]
+    if inn.startswith("nabta"):
+        return pref + inn[len("nabta") :]
+    return f"{pref}-{inn}"
 
 
 def build_sheet_row(
@@ -30,16 +44,16 @@ def build_sheet_row(
     total_sar: float,
     lines: list[tuple[str, int]],
 ) -> dict[str, str | int]:
-    """JSON body matching spreadsheet columns (DATE … STATUS); status stays empty."""
+    """JSON body matching Sheets row order (see ``google-apps-script-webhook.js``). ``status`` sent empty."""
 
     order_date = datetime.now(Ryadh).strftime("%d/%m/%Y")
 
-    arabic_names: list[str] = []
+    arabic_short: list[str] = []
     skus: list[str] = []
     qtys: list[str] = []
     for product_id, qty in lines:
-        ar, _en = resolve_product(product_id)
-        arabic_names.append(ar)
+        resolve_product(product_id)  # validate id
+        arabic_short.append(sheet_product_labels(product_id))
         skus.append(resolve_sku(product_id))
         qtys.append(str(qty))
 
@@ -47,11 +61,11 @@ def build_sheet_row(
 
     return {
         "date": order_date,
-        "order_id": order_number,
+        "order_id": sheet_order_public_id(order_number),
         "country": "KSA",
         "name": customer_name.strip(),
         "phone": phone_digits,
-        "product": "/".join(arabic_names),
+        "product": "/".join(arabic_short),
         "sku": "/".join(skus),
         "quantity": "/".join(qtys),
         "total_price": total_int,

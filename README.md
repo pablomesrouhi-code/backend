@@ -75,9 +75,10 @@ Until the origin returns **200** JSON for `/health`, public `https://api.nabtala
 
 ## Google Sheet (orders row)
 
-After each successful `POST /api/orders`, the API POSTs one JSON row in the background to **`GOOGLE_SHEET_WEBHOOK_URL`** (Google Apps Script web app). Reference script: **`backend/sheet/google-apps-script-webhook.js`** — open **from inside the spreadsheet** (Extensions → Apps Script), paste, **Deploy → New deployment → Web app**, **Anyone** access, paste `/exec` into EasyPanel env.
+Payload fields: **date** (`dd/mm/yyyy` Riyadh), **order_id** (`SHEET_ORDER_ID_PREFIX` + tail of `nabta-…`, default **`nama-2026-000001`** style), **country** `KSA`, **name**, **phone** `9665…` (digits, no `+`), **product** / **sku** / **quantity** slash-separated (Arabic short product titles + stable SKUs from `app/services/catalog.py`). **total_price** integer SAR, **currency** `SAR`, **status** empty. Header template: **`docs/sheet/orders-template-order-csv-headers.csv`**.
 
 - Retries run on transient errors; each order persists **`sheet_error`** / **`sheet_sent_at`** (see `orders` columns). Typical failures: webhook URL typo, deployment not **Anyone**, **standalone script** without **`SPREADSHEET_ID`**, or Google returning HTML (**`non_json_response`**) instead of **`{"ok":true}`**.
+- The Apps Script Web App needs **no secret** — only paste **`GOOGLE_SHEET_WEBHOOK_URL`** in backend (optional alias **`SHEET_WEBHOOK_URL`**).
 - Diagnostics (set **`DATABASE_DIAGNOSTICS_TOKEN`** first): **`GET /api/diagnostics/sheet-webhook?token=…`** — GET-probes the URL and lists recent orders including **`sheet_error`**.
 - **Replay** a Postgres order to the Sheet: **`POST /api/diagnostics/resend-sheet-row?token=…`** with JSON body **`{"order_number":"NBT-…"}`** or **`{"order_id":"uuid"}`**.
 
