@@ -175,6 +175,9 @@ def send_google_sheet_webhook(
 
             if isinstance(j, dict):
                 script_err = str(j.get("error") or j.get("detail") or "script_ok_false")[:400]
+                hint = j.get("hint")
+                if isinstance(hint, str) and hint.strip():
+                    script_err = f"{script_err} — {hint.strip()[:280]}"
                 last_err = f"sheet_script:{script_err}"
             else:
                 last_err = "unexpected_json"
