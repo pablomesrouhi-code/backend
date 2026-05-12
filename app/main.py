@@ -21,6 +21,7 @@ from app.db_migrate import run_upgrade_head
 from app.routers import capi as capi_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
+from app.routers import sheet_health as sheet_health_router
 from app.services.sheet_webhook import _webhook_url_from_env
 
 logging.basicConfig(level=logging.INFO)
@@ -105,6 +106,7 @@ app.add_middleware(
 app.include_router(capi_router.router, prefix="/capi", tags=["capi"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
 app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"])
+app.include_router(sheet_health_router.router, prefix="/api", tags=["sheet"])
 
 
 class HealthResponse(BaseModel):
@@ -128,25 +130,14 @@ def live() -> HealthResponse:
     return HealthResponse()
 
 
-class SheetWebhookStatus(BaseModel):
-    """Whether this process has a non-empty sheet URL in env (nothing secret is returned)."""
+@app.get(
+    "/sheet-webhook-status",
+    response_model=sheet_health_router.SheetWebhookStatus,
+)
+def sheet_webhook_status_root_compat() -> sheet_health_router.SheetWebhookStatus:
+    """Same JSON as `/api/sheet-webhook-status` for probes outside the `/api` prefix."""
 
-    configured: bool
-    app_env: str
-    hint: str
-
-
-@app.get("/sheet-webhook-status", response_model=SheetWebhookStatus)
-@app.get("/api/sheet-webhook-status", response_model=SheetWebhookStatus)
-def sheet_webhook_status() -> SheetWebhookStatus:
-    """Hit this from the browser if orders save but rows never reach Sheets — ``configured`` must be true."""
-
-    ae = (os.getenv("APP_ENV") or "").strip() or "(unset)"
-    return SheetWebhookStatus(
-        configured=bool(_webhook_url_from_env()),
-        app_env=ae,
-        hint="If configured is false: add GOOGLE_SHEET_WEBHOOK_URL or SHEET_WEBHOOK_URL to THIS API service in EasyPanel and restart. If true: open orders.sheet_error in Postgres after a test order, and check API logs for SHEET_ENQUEUED → SEND_DONE.",
-    )
+    return sheet_health_router.sheet_webhook_status_root()
 
 
 def _readiness_lite() -> bool:
