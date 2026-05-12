@@ -140,16 +140,6 @@ def sheet_webhook_status_root_compat() -> sheet_health_router.SheetWebhookStatus
     return sheet_health_router.sheet_webhook_status_root()
 
 
-_sheet_paths: list[str] = []
-for _route in app.routes:
-    _p = getattr(_route, "path", "")
-    if _p and "sheet-webhook-status" in _p:
-        _sheet_paths.append(_p)
-        logging.info("[startup] registered %s %s", getattr(_route, "methods", frozenset()), _p)
-if not _sheet_paths:
-    logging.warning("[startup] NO sheet-webhook-status routes registered — image/branch mismatch")
-
-
 def _readiness_lite() -> bool:
     """Panels that probe `/ready` but you skip Postgres: set READINESS_LITE=true (EasyPanel green)."""
     return os.getenv("READINESS_LITE", "").strip().lower() in ("1", "true", "yes")
