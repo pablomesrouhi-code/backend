@@ -137,6 +137,7 @@ class SheetWebhookStatus(BaseModel):
 
 
 @app.get("/sheet-webhook-status", response_model=SheetWebhookStatus)
+@app.get("/api/sheet-webhook-status", response_model=SheetWebhookStatus)
 def sheet_webhook_status() -> SheetWebhookStatus:
     """Hit this from the browser if orders save but rows never reach Sheets — ``configured`` must be true."""
 
