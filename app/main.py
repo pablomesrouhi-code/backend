@@ -13,11 +13,14 @@ import app.models  # noqa: F401 — register ORM metadata & configure engine whe
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.cors_config import cors_allowed_origins
 from app.db_migrate import run_upgrade_head
+from app.routers import admin_dashboard as admin_dashboard_router
+from app.routers import analytics_collect as analytics_collect_router
 from app.routers import capi as capi_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
@@ -107,6 +110,8 @@ app.include_router(capi_router.router, prefix="/capi", tags=["capi"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
 app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"])
 app.include_router(sheet_health_router.router, prefix="/api", tags=["sheet"])
+app.include_router(analytics_collect_router.router, prefix="/api", tags=["analytics"])
+app.include_router(admin_dashboard_router.router, prefix="/api", tags=["admin"])
 
 
 class HealthResponse(BaseModel):
@@ -212,3 +217,9 @@ def ready() -> HealthResponse:
 @app.get("/")
 def root() -> dict[str, str]:
     return {"service": "nabtalabo-api", "docs": "/docs"}
+
+
+@app.get("/admin")
+def admin_shortcut() -> RedirectResponse:
+    """Shortcut to the admin UI served at `/api/admin`."""
+    return RedirectResponse(url="/api/admin", status_code=307)

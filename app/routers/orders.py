@@ -18,6 +18,7 @@ from app.services.catalog import resolve_product
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
 from app.services.sheet_webhook import apply_sheet_delivery_to_order, build_sheet_row
+from app.request_ip import client_ip
 from app.services.maxmind_fraud import evaluate_order_fraud
 from app.services.pricing import (
     UPSELL_PRICE_SAR,
@@ -34,15 +35,6 @@ async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str 
     """Run sync sheet POST in a worker thread so it always runs after the HTTP response (reliable with ASGI)."""
 
     await asyncio.to_thread(apply_sheet_delivery_to_order, order_id, payload)
-
-
-def _client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
 
 
 @router.post("/orders", response_model=CreateOrderResponse)
@@ -102,7 +94,7 @@ def create_order(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     fraud = evaluate_order_fraud(
-        client_ip=_client_ip(request),
+        client_ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         phone_e164=phone_e164,
         phone_local=phone_local,
@@ -144,7 +136,7 @@ def create_order(
         source_page=body.source_page,
         client_event_id=body.client_event_id,
         purchase_event_id=body.purchase_event_id,
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
         maxmind_country_iso=mm_fields.country_iso if mm_fields else None,
         maxmind_risk_score=mm_fields.risk_score if mm_fields else None,
