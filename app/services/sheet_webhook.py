@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 Ryadh = ZoneInfo("Asia/Riyadh")
 
 
+def _digits_only_sa_phone(phone_digits: str) -> str:
+    """Sheets PHONE column: ``966XXXXXXXXX`` digits only (no + or spaces)."""
+
+    d = "".join(ch for ch in (phone_digits or "") if ch.isdigit())
+    if d.startswith("966") and len(d) >= 12:
+        return d[:12]
+    return d
+
+
+def _sar_total_rounded(total_sar: float) -> float:
+    """TOTALPRICE as number for Google Sheets (2 decimal places SAR)."""
+
+    return round(float(total_sar) + 1e-9, 2)
+
+
 def sheet_order_public_id(internal_order_number: str) -> str:
     """Public ORDERID for Sheets (``SHEET_ORDER_ID_PREFIX``). Default converts ``nabta-…`` → ``nama-…``."""
 
@@ -43,8 +58,11 @@ def build_sheet_row(
     order_number: str,
     total_sar: float,
     lines: list[tuple[str, int]],
-) -> dict[str, str | int]:
-    """JSON body matching Sheets row order (see ``google-apps-script-webhook.js``). ``status`` sent empty."""
+) -> dict[str, str | float]:
+    """Maps to Spreadsheet row 1 CSV: DATE, ORDERID, COUNTRYC, NAME, PHONE, PRODUCT, SKU, QUANTITY, TOTALPRICE, CURRENCY, STATUS.
+
+    Internal ``nabta-YYYY-NNNNNN`` → public ``nama-YYYY-NNNNNN`` via ``sheet_order_public_id``. STATUS is always blank in JSON — Apps Script clears the STATUS cell too.
+    """
 
     order_date = datetime.now(Ryadh).strftime("%d/%m/%Y")
 
@@ -57,78 +75,24 @@ def build_sheet_row(
         skus.append(resolve_sku(product_id))
         qtys.append(str(qty))
 
-    total_int = int(round(total_sar))
+    total_out = _sar_total_rounded(total_sar)
 
     return {
         "date": order_date,
         "order_id": sheet_order_public_id(order_number),
         "country": "KSA",
         "name": customer_name.strip(),
-        "phone": phone_digits,
+        "phone": _digits_only_sa_phone(phone_digits),
         "product": "/".join(arabic_short),
         "sku": "/".join(skus),
         "quantity": "/".join(qtys),
-        "total_price": total_int,
+        "total_price": total_out,
         "currency": "SAR",
         "status": "",
     }
 
 
-def marketing_lead_order_id_for_sheet(lead_event_id: str) -> str:
-    """Public ORDERID for Meta Lead row (distinct من صف الطلب nabta-/nama- الأساسي)."""
-
-    slug = "".join(c for c in lead_event_id if c.isalnum())
-    if len(slug) < 8:
-        slug = f"evt{int(time.time())}"
-    slug = slug[:36]
-    pref = (os.getenv("SHEET_ORDER_ID_PREFIX") or "nama").strip().lower() or "nama"
-    return f"{pref}-mkt-{slug}"
-
-
-def build_marketing_lead_sheet_row(
-    *,
-    customer_name: str,
-    phone_digits: str,
-    total_sar: float,
-    lines: list[tuple[str, int]],
-    lead_event_id: str,
-    order_number_hint: str | None,
-) -> dict[str, str | int]:
-    """صف يطابق شبكة webhook؛ عمود STATUS = meta Lead (تلقائي من thank-you بعد fbq Lead)."""
-
-    order_date = datetime.now(Ryadh).strftime("%d/%m/%Y")
-
-    arabic_short: list[str] = []
-    skus: list[str] = []
-    qtys: list[str] = []
-    for product_id, qty in lines:
-        resolve_product(product_id)
-        arabic_short.append(sheet_product_labels(product_id))
-        skus.append(resolve_sku(product_id))
-        qtys.append(str(qty))
-
-    total_int = int(round(total_sar))
-    order_id_out = marketing_lead_order_id_for_sheet(lead_event_id)
-    status_bits = ["meta_lead"]
-    if order_number_hint:
-        status_bits.append(f"order={order_number_hint.strip()}")
-
-    return {
-        "date": order_date,
-        "order_id": order_id_out,
-        "country": "KSA",
-        "name": customer_name.strip(),
-        "phone": phone_digits,
-        "product": "/".join(arabic_short),
-        "sku": "/".join(skus),
-        "quantity": "/".join(qtys),
-        "total_price": total_int,
-        "currency": "SAR",
-        "status": " / ".join(status_bits),
-    }
-
-
-def rebuild_sheet_payload_from_persisted_order(order: Order) -> dict[str, str | int]:
+def rebuild_sheet_payload_from_persisted_order(order: Order) -> dict[str, str | float]:
     """Rebuild POST JSON from DB (manual resend / diagnostics). Lines follow saved ``order_items`` order."""
 
     lines = [(it.product_id.strip().lower(), it.offer_qty) for it in order.items]
@@ -170,7 +134,7 @@ def _webhook_url_from_env() -> str:
 
 
 def send_google_sheet_webhook(
-    payload: dict[str, str | int],
+    payload: dict[str, str | int | float],
 ) -> tuple[Literal["ok", "skipped", "failed"], str | None]:
     """POST JSON to Apps Script; retries on transient errors so orders reach the Sheet."""
 
@@ -267,7 +231,7 @@ def send_google_sheet_webhook(
 
 
 def apply_sheet_delivery_to_order(
-    order_id: uuid.UUID, payload: dict[str, str | int]
+    order_id: uuid.UUID, payload: dict[str, str | int | float]
 ) -> None:
     """POST to Apps Script **after** the API response returns (avoid blocking checkout).
 

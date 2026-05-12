@@ -30,7 +30,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str | int]) -> None:
+async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str | int | float]) -> None:
     """Run sync sheet POST in a worker thread so it always runs after the HTTP response (reliable with ASGI)."""
 
     await asyncio.to_thread(apply_sheet_delivery_to_order, order_id, payload)

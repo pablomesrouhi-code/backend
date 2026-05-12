@@ -1,28 +1,18 @@
 /**
- * NabtaLabo — append one order row from backend POST JSON.
+ * NabtaLabo Orders → Google Sheet (Web App `/exec`).
  *
- * مهم جداً — Lead (Meta Pixel / شكرًا) ماكيدوزش لهنا. السطور كاتزاد غير من Nabtalabo API
- * بحال POST /api/orders بعد ما الطلب يتسجل فـ Postgres. إذا بغيتي تسجّل فـ Sheet، خاص
- * checkout يكمّل و API تبعث JSON لهاد السكريپت.
+ * Row 1 headers must match Nabtalabo (Sheet1.csv):
+ * DATE,ORDERID,COUNTRYC,NAME,PHONE,PRODUCT,SKU,QUANTITY,TOTALPRICE,CURRENCY,STATUS
  *
- * Deploy: Extensions → Apps Script (من داخل الشيت) → لصق → Deploy → Web app
- * Execute as: Me | Who has access: Anyone (with link) أو Anyone
- * حط رابط الـ deployment فـ GOOGLE_SHEET_WEBHOOK_URL (كيخلص بـ /exec)
- *
- * سكريپت standalone من script.google.com: عيّن SPREADSHEET_ID من الرابط (.../d/ID/edit).
- * SHEET_TAB_NAME: اسم الورقة بالحرف؛ خليه '' باش يستعمل اللولانية.
+ * Deploy from the spreadsheet: Extensions → Apps Script → paste → Deploy → Web app
+ * Execute as: Me · Who has access: Anyone / Anyone with link
+ * Backend env: GOOGLE_SHEET_WEBHOOK_URL = paste URL ending in /exec (no separate secret variable).
  */
 
-var WEBHOOK_VERSION = 2;
+var WEBHOOK_VERSION = 3;
 
-var SPREADSHEET_ID = ''; // حط ID الشيت؛ خليه فارغ إلا السكريپت مربوط من داخل Spreadsheet
-
-var SHEET_TAB_NAME = ''; // مثال 'Orders' — مطابق اسم التبويب أو ''
-
-/**
- * Headers row 1 (ORDER template).
- * DATE | ORDERID | COUNTRYC | NAME | PHONE | PRODUCT | SKU | QUANTITY | TOTALPRICE | CURRENCY | STATUS
- */
+var SPREADSHEET_ID = '';
+var SHEET_TAB_NAME = '';
 
 function getSpreadsheet_() {
   var sid = SPREADSHEET_ID ? String(SPREADSHEET_ID).trim() : '';
@@ -32,7 +22,7 @@ function getSpreadsheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) {
     throw new Error(
-      'No spreadsheet: مشروع standalone خاصّو SPREADSHEET_ID من URL الشيت (/d/ID/edit)، أو أنشئ السكريپت من Extensions → Apps Script من داخل نفس الشيت.'
+      'Standalone: set SPREADSHEET_ID from the Sheet URL (…/d/ID/edit), or attach the script from inside the Spreadsheet.'
     );
   }
   return ss;
@@ -44,7 +34,7 @@ function getTargetSheet_() {
   if (tab.length > 0) {
     var sh = ss.getSheetByName(tab);
     if (!sh) {
-      throw new Error('Sheet tab not found: "' + tab + '" — دوّز SHEET_TAB_NAME بحال اسم التبويب بالضبط.');
+      throw new Error('Tab not found: "' + tab + '" — fix SHEET_TAB_NAME.');
     }
     return sh;
   }
@@ -65,40 +55,33 @@ function isEmptyValue_(v) {
   return String(v).trim() === '';
 }
 
-/**
- * @returns {Object|null} null = OK, otherwise { error: string, hint: string }
- */
+function normalizePayloadAliases_(data) {
+  var d = data;
+  if (d.ORDERID && d.order_id == null) d.order_id = d.ORDERID;
+  if (d.TOTALPRICE != null && d.total_price == null) d.total_price = d.TOTALPRICE;
+  return d;
+}
+
+/** @returns {Object|null} null = OK */
 function validatePayload_(data) {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-    return {
-      error: 'payload_not_object',
-      hint: 'السكريپت كيتوقع JSON object من API. Lead و pixel ما كيبعثوش لهنا — غير طلبات من /api/orders.',
-    };
+    return { error: 'payload_not_object', hint: 'Send JSON POST from Nabtalabo API (POST /api/orders).' };
   }
 
-  var keys = [
-    'date',
-    'order_id',
-    'country',
-    'name',
-    'phone',
-    'product',
-    'sku',
-    'quantity',
-    'total_price',
-    'currency',
-  ];
+  normalizePayloadAliases_(data);
+
+  var keys = ['date', 'order_id', 'country', 'name', 'phone', 'product', 'sku', 'quantity', 'total_price', 'currency'];
 
   var labels = {
-    date: 'date (DD/MM/YYYY)',
-    order_id: 'order_id',
+    date: 'date',
+    order_id: 'order_id (nama…)',
     country: 'country',
     name: 'name',
     phone: 'phone (966…)',
     product: 'product',
     sku: 'sku',
     quantity: 'quantity',
-    total_price: 'total_price (رقم)',
+    total_price: 'total_price',
     currency: 'currency',
   };
 
@@ -106,18 +89,12 @@ function validatePayload_(data) {
     var k = keys[i];
     if (k === 'total_price') {
       if (data[k] === undefined || data[k] === null || isNaN(Number(data[k]))) {
-        return {
-          error: 'missing_or_invalid_total_price',
-          hint: 'خاص total_price يكون رقم (الـ API كيبعثو integer بالسار).',
-        };
+        return { error: 'missing_or_invalid_total_price', hint: 'Must be numeric (TOTALPRICE).' };
       }
       continue;
     }
     if (isEmptyValue_(data[k])) {
-      return {
-        error: 'missing_' + k,
-        hint: 'الحقل ' + (labels[k] || k) + ' فارغ — راجع payload من الباك اند.',
-      };
+      return { error: 'missing_' + k, hint: labels[k] + ' missing' };
     }
   }
 
@@ -131,9 +108,9 @@ function doGet(e) {
     ok: true,
     version: WEBHOOK_VERSION,
     service: 'nabtalabo-sheet-webhook',
-    lead_vs_order:
-      'Meta Lead / Thank-you page لا يُرسلان إلى Sheet. الصفوف تُضاف فقط بعد POST /api/orders مع حفظ في Postgres.',
-    hint: 'نفس رابط /exec: ?check=1 اختبار قراءة الشيت؛ ?check=append صف تجريبي واحد (احذفه بعد التحقق).',
+    sheet_headers_row_1_expected:
+      'DATE,ORDERID,COUNTRYC,NAME,PHONE,PRODUCT,SKU,QUANTITY,TOTALPRICE,CURRENCY,STATUS',
+    hint: '?check=1 = read spreadsheet; ?check=append = one junk test row (delete after).',
   };
 
   payload.config = {
@@ -149,33 +126,34 @@ function doGet(e) {
       payload.sheet_check = {
         ok: true,
         spreadsheet_title: ss.getName(),
-        spreadsheet_id_from_url: ss.getId(),
+        spreadsheet_id: ss.getId(),
         sheet_tab: sheet.getName(),
         rows_used: sheet.getLastRow(),
-        cols_used: sheet.getLastColumn(),
       };
     } catch (err) {
-      payload.sheet_check = {
-        ok: false,
-        error: String(err.message || err),
-      };
+      payload.sheet_check = { ok: false, error: String(err.message || err) };
     }
   }
 
-  /** Optional: append test row (?check=append) — for manual QA only */
   if (check === 'append') {
     try {
       var sh = getTargetSheet_();
-      sh.appendRow(['TEST', 'nama-test-' + Date.now(), 'KSA', 'Webhook test', '966500000000', 'تجربة', 'TEST', '1', 1, 'SAR', '']);
-      payload.manual_append_test = {
-        ok: true,
-        message: 'Test row appended — احذفها من الشيت بعد التحقق.',
-      };
+      sh.appendRow([
+        'TEST',
+        'nama-test-' + Date.now(),
+        'KSA',
+        'Webhook',
+        '966500000000',
+        'اختبار',
+        'NBT-TEST',
+        '1',
+        1,
+        'SAR',
+        '',
+      ]);
+      payload.manual_append_test = { ok: true };
     } catch (err2) {
-      payload.manual_append_test = {
-        ok: false,
-        error: String(err2.message || err2),
-      };
+      payload.manual_append_test = { ok: false, error: String(err2.message || err2) };
     }
   }
 
@@ -189,22 +167,13 @@ function doPost(e) {
     return jsonResponse({
       ok: false,
       error: 'empty_body',
-      hint: 'POST بدون postData — تأكد أن الباك اند كيبعث Content-Type: application/json و body JSON.',
+      hint: 'Expect application/json body from Nabtalabo API.',
     });
   }
 
   var raw = e.postData.contents;
   if (!raw || String(raw).trim() === '') {
-    return jsonResponse({
-      ok: false,
-      error: 'empty_body',
-      hint: 'Body فارغ. الـ API خاصّو json=payload لـ /exec.',
-    });
-  }
-
-  var ctype = (e.postData.type || '').toLowerCase();
-  if (ctype.indexOf('json') === -1 && ctype.length > 0) {
-    // Apps Script may still parse; warn for ops
+    return jsonResponse({ ok: false, error: 'empty_body' });
   }
 
   var data;
@@ -218,20 +187,17 @@ function doPost(e) {
     });
   }
 
+  normalizePayloadAliases_(data);
+
   try {
     var inv = validatePayload_(data);
     if (inv) {
-      return jsonResponse({
-        ok: false,
-        error: inv.error,
-        hint: inv.hint,
-        version: WEBHOOK_VERSION,
-      });
+      return jsonResponse({ ok: false, error: inv.error, hint: inv.hint, version: WEBHOOK_VERSION });
     }
 
     var sheet = getTargetSheet_();
-    var status = data.status != null ? String(data.status) : '';
 
+    // STATUS column stays empty (values in JSON ignored for that column).
     sheet.appendRow([
       String(data.date),
       String(data.order_id),
@@ -243,20 +209,15 @@ function doPost(e) {
       String(data.quantity),
       Number(data.total_price),
       String(data.currency),
-      status,
+      '',
     ]);
 
-    return jsonResponse({
-      ok: true,
-      version: WEBHOOK_VERSION,
-      appended: true,
-    });
+    return jsonResponse({ ok: true, version: WEBHOOK_VERSION, appended: true });
   } catch (err) {
     return jsonResponse({
       ok: false,
       error: 'append_failed',
       detail: String(err.message || err),
-      hint: 'صلاحيات الشيت؟ SPREADSHEET_ID / SHEET_TAB_NAME؟ الحساب اللي عمل Deploy لازم يقدر يكتب فـ الشيت.',
       version: WEBHOOK_VERSION,
     });
   }

@@ -17,11 +17,11 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
     ),
 }
 
-# Stable opaque SKU per product (Sheets / integrations).
+# Stable opaque SKU per store product — random-looking codes for Sheets SKU column (unchanging per sku).
 PRODUCT_SKUS: dict[str, str] = {
-    "rawnaq-c": "NBT-8K4M2P9Q1",
-    "khiffabiotic": "NBT-3R7V1W6X4",
-    "laylmag": "NBT-5T9Y2Z8A3",
+    "rawnaq-c": "NBT-Q8K92MX7PL",
+    "khiffabiotic": "NBT-4RJ63WN9VK",
+    "laylmag": "NBT-9HZ51YT2RD",
 }
 
 
