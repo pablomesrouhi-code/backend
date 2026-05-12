@@ -128,6 +128,26 @@ def live() -> HealthResponse:
     return HealthResponse()
 
 
+class SheetWebhookStatus(BaseModel):
+    """Whether this process has a non-empty sheet URL in env (nothing secret is returned)."""
+
+    configured: bool
+    app_env: str
+    hint: str
+
+
+@app.get("/sheet-webhook-status", response_model=SheetWebhookStatus)
+def sheet_webhook_status() -> SheetWebhookStatus:
+    """Hit this from the browser if orders save but rows never reach Sheets — ``configured`` must be true."""
+
+    ae = (os.getenv("APP_ENV") or "").strip() or "(unset)"
+    return SheetWebhookStatus(
+        configured=bool(_webhook_url_from_env()),
+        app_env=ae,
+        hint="If configured is false: add GOOGLE_SHEET_WEBHOOK_URL or SHEET_WEBHOOK_URL to THIS API service in EasyPanel and restart. If true: open orders.sheet_error in Postgres after a test order, and check API logs for SHEET_ENQUEUED → SEND_DONE.",
+    )
+
+
 def _readiness_lite() -> bool:
     """Panels that probe `/ready` but you skip Postgres: set READINESS_LITE=true (EasyPanel green)."""
     return os.getenv("READINESS_LITE", "").strip().lower() in ("1", "true", "yes")
