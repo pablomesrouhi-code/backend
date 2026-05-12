@@ -74,6 +74,60 @@ def build_sheet_row(
     }
 
 
+def marketing_lead_order_id_for_sheet(lead_event_id: str) -> str:
+    """Public ORDERID for Meta Lead row (distinct من صف الطلب nabta-/nama- الأساسي)."""
+
+    slug = "".join(c for c in lead_event_id if c.isalnum())
+    if len(slug) < 8:
+        slug = f"evt{int(time.time())}"
+    slug = slug[:36]
+    pref = (os.getenv("SHEET_ORDER_ID_PREFIX") or "nama").strip().lower() or "nama"
+    return f"{pref}-mkt-{slug}"
+
+
+def build_marketing_lead_sheet_row(
+    *,
+    customer_name: str,
+    phone_digits: str,
+    total_sar: float,
+    lines: list[tuple[str, int]],
+    lead_event_id: str,
+    order_number_hint: str | None,
+) -> dict[str, str | int]:
+    """صف يطابق شبكة webhook؛ عمود STATUS = meta Lead (تلقائي من thank-you بعد fbq Lead)."""
+
+    order_date = datetime.now(Ryadh).strftime("%d/%m/%Y")
+
+    arabic_short: list[str] = []
+    skus: list[str] = []
+    qtys: list[str] = []
+    for product_id, qty in lines:
+        resolve_product(product_id)
+        arabic_short.append(sheet_product_labels(product_id))
+        skus.append(resolve_sku(product_id))
+        qtys.append(str(qty))
+
+    total_int = int(round(total_sar))
+    order_id_out = marketing_lead_order_id_for_sheet(lead_event_id)
+    status_bits = ["meta_lead"]
+    if order_number_hint:
+        status_bits.append(f"order={order_number_hint.strip()}")
+
+    return {
+        "date": order_date,
+        "order_id": order_id_out,
+        "country": "KSA",
+        "name": customer_name.strip(),
+        "phone": phone_digits,
+        "product": "/".join(arabic_short),
+        "sku": "/".join(skus),
+        "quantity": "/".join(qtys),
+        "total_price": total_int,
+        "currency": "SAR",
+        "status": " / ".join(status_bits),
+    }
+
+
 def rebuild_sheet_payload_from_persisted_order(order: Order) -> dict[str, str | int]:
     """Rebuild POST JSON from DB (manual resend / diagnostics). Lines follow saved ``order_items`` order."""
 

@@ -21,6 +21,7 @@ from app.db_migrate import run_upgrade_head
 from app.routers import capi as capi_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
+from app.routers import sheet_leads as sheet_leads_router
 from app.services.sheet_webhook import _webhook_url_from_env
 
 logging.basicConfig(level=logging.INFO)
@@ -105,6 +106,8 @@ app.add_middleware(
 app.include_router(capi_router.router, prefix="/capi", tags=["capi"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
 app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"])
+
+app.include_router(sheet_leads_router.router, prefix="/api", tags=["sheet-leads"])
 
 
 class HealthResponse(BaseModel):
