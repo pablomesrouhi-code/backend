@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY alembic.ini .
 COPY migrations ./migrations
 COPY app ./app
+# Fail Docker build if admin HTML is missing (avoids 500 from TemplateResponse / missing template).
+RUN test -f app/templates/admin_dashboard.html
 # Fail Docker build immediately if upstream deploy missed new modules (easier than a crash-loop in prod).
 RUN test -f app/log_safe.py
 

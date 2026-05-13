@@ -99,9 +99,11 @@ def admin_ui(request: Request):
     if not _admin_enabled():
         raise HTTPException(status_code=404, detail="Not found")
     authed = bool(verify_admin_token(request.cookies.get(COOKIE_NAME)))
+    # Starlette ≥0.29: TemplateResponse(request, name, context=…) — old (name, dict) breaks prod (500).
     return _TEMPLATES.TemplateResponse(
-        "admin_dashboard.html",
-        {"request": request, "authed": authed},
+        request=request,
+        name="admin_dashboard.html",
+        context={"authed": authed},
     )
 
 
