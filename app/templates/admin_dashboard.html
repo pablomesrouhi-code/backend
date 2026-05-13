@@ -296,7 +296,20 @@
       const s = document.getElementById('start-date').value;
       const e = document.getElementById('end-date').value;
       const r = await api(`/api/admin/data/metrics?start=${encodeURIComponent(s)}&end=${encodeURIComponent(e)}`);
-      const j = await r.json();
+      let j;
+      try {
+        j = await r.json();
+      } catch {
+        document.getElementById('metrics-note').textContent =
+          'تعذّر قراءة JSON للمقاييس — تأكّد من أنّك مسجّل الدخول والـ API يعمل.';
+        return;
+      }
+      if (!r.ok) {
+        const msg = (j && (j.detail || j.message)) ? String(j.detail || j.message) : JSON.stringify(j);
+        document.getElementById('metrics-note').textContent =
+          'خطأ في المقاييس (HTTP ' + r.status + '): ' + msg;
+        return;
+      }
       document.getElementById('kpi-clicks').textContent = j.trusted_clicks.toLocaleString('ar-SA');
       document.getElementById('kpi-orders').textContent = j.orders.toLocaleString('ar-SA');
       const cr = j.conversion_rate_percent;
@@ -308,10 +321,12 @@
       const ur = j.upsell_attach_rate_percent;
       document.getElementById('kpi-upsell').textContent =
         ur == null ? '—' : `${ur.toLocaleString('ar-SA', {maximumFractionDigits:2})}%`;
-      document.getElementById('metrics-note').textContent =
+      let note =
         `مسجّل صفحات: ${j.total_page_views_recorded.toLocaleString('ar-SA')} · `
         + `IPs موثوقة مميزة: ${j.trusted_unique_ips.toLocaleString('ar-SA')} · `
         + j.notes;
+      if (j.warning) note += ' · تنبيه: ' + j.warning;
+      document.getElementById('metrics-note').textContent = note;
     }
 
     let off = 0;

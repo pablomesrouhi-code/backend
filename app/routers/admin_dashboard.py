@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session
 
 from app.admin_session import mint_admin_token, verify_admin_token
@@ -28,6 +28,14 @@ _TEMPLATES = Jinja2Templates(
 )
 
 COOKIE_NAME = "nbt_admin"
+
+
+def _public_table_exists(db: Session, table: str) -> bool:
+    try:
+        bind = db.get_bind()
+        return bool(inspect(bind).has_table(table, schema="public"))
+    except Exception:
+        return False
 
 
 def _admin_enabled() -> bool:
@@ -133,38 +141,49 @@ def admin_metrics(
     end_s = end.strip() or today
     start_dt, end_dt = _parse_day_range(start_s, end_s)
 
-    trusted_views = db.scalar(
-        select(func.count())
-        .select_from(AnalyticsEvent)
-        .where(
-            AnalyticsEvent.created_at >= start_dt,
-            AnalyticsEvent.created_at < end_dt,
-            AnalyticsEvent.event_type == "page_view",
-            AnalyticsEvent.counts_as_trusted.is_(True),
+    analytics_ready = _public_table_exists(db, "analytics_events")
+    warning: str | None = None
+    if not analytics_ready:
+        warning = (
+            "جدول analytics_events غير موجود — شغّل alembic upgrade head "
+            "أو نفّذ backend/scripts/0002_analytics_events.sql على نفس قاعدة DATABASE_URL."
         )
-    ) or 0
+        trusted_views = 0
+        total_views = 0
+        trusted_unique_ips = 0
+    else:
+        trusted_views = db.scalar(
+            select(func.count())
+            .select_from(AnalyticsEvent)
+            .where(
+                AnalyticsEvent.created_at >= start_dt,
+                AnalyticsEvent.created_at < end_dt,
+                AnalyticsEvent.event_type == "page_view",
+                AnalyticsEvent.counts_as_trusted.is_(True),
+            )
+        ) or 0
 
-    total_views = db.scalar(
-        select(func.count())
-        .select_from(AnalyticsEvent)
-        .where(
-            AnalyticsEvent.created_at >= start_dt,
-            AnalyticsEvent.created_at < end_dt,
-            AnalyticsEvent.event_type == "page_view",
-        )
-    ) or 0
+        total_views = db.scalar(
+            select(func.count())
+            .select_from(AnalyticsEvent)
+            .where(
+                AnalyticsEvent.created_at >= start_dt,
+                AnalyticsEvent.created_at < end_dt,
+                AnalyticsEvent.event_type == "page_view",
+            )
+        ) or 0
 
-    trusted_unique_ips = db.scalar(
-        select(func.count(func.distinct(AnalyticsEvent.ip_address)))
-        .select_from(AnalyticsEvent)
-        .where(
-            AnalyticsEvent.created_at >= start_dt,
-            AnalyticsEvent.created_at < end_dt,
-            AnalyticsEvent.event_type == "page_view",
-            AnalyticsEvent.counts_as_trusted.is_(True),
-            AnalyticsEvent.ip_address.is_not(None),
-        )
-    ) or 0
+        trusted_unique_ips = db.scalar(
+            select(func.count(func.distinct(AnalyticsEvent.ip_address)))
+            .select_from(AnalyticsEvent)
+            .where(
+                AnalyticsEvent.created_at >= start_dt,
+                AnalyticsEvent.created_at < end_dt,
+                AnalyticsEvent.event_type == "page_view",
+                AnalyticsEvent.counts_as_trusted.is_(True),
+                AnalyticsEvent.ip_address.is_not(None),
+            )
+        ) or 0
 
     orders_count = db.scalar(
         select(func.count())
@@ -198,7 +217,7 @@ def admin_metrics(
     if orders_count > 0:
         upsell_rate = round(100.0 * float(upsell_orders) / float(orders_count), 3)
 
-    return {
+    out: dict[str, Any] = {
         "range": {"start": start_s, "end": end_s, "timezone": "UTC"},
         "trusted_clicks": int(trusted_views),
         "trusted_unique_ips": int(trusted_unique_ips),
@@ -214,6 +233,9 @@ def admin_metrics(
             "trusted = SA + MaxMind/IPQS analytics rules."
         ),
     }
+    if warning is not None:
+        out["warning"] = warning
+    return out
 
 
 @router.get("/admin/data/orders")
