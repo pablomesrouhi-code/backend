@@ -42,8 +42,27 @@ def _admin_enabled() -> bool:
     return os.getenv("ADMIN_ENABLED", "true").strip().lower() in ("1", "true", "yes")
 
 
-def _cookie_secure() -> bool:
-    return os.getenv("ADMIN_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+def _cookie_secure(request: Request | None = None) -> bool:
+    """Secure cookie flag.
+
+    **Important:** ``ADMIN_COOKIE_SECURE=true`` over plain HTTP prevents browsers from storing
+    the admin session cookie — login appears broken (reload shows login again).
+
+    When unset: ``Secure`` is applied only if the request is HTTPS or ``X-Forwarded-Proto: https``.
+    """
+
+    raw = os.getenv("ADMIN_COOKIE_SECURE", "").strip().lower()
+    if raw in ("1", "true", "yes"):
+        return True
+    if raw in ("0", "false", "no"):
+        return False
+    if request is None:
+        return False
+    xf = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    if xf == "https":
+        return True
+    scheme = getattr(request.url, "scheme", "") or ""
+    return scheme == "https"
 
 
 def _parse_day_range(start_s: str, end_s: str) -> tuple[datetime, datetime]:
@@ -86,8 +105,43 @@ def admin_ui(request: Request):
     )
 
 
+@router.get("/admin/setup-status")
+def admin_setup_status(request: Request) -> dict[str, Any]:
+    """Anonymous diagnostics — booleans only (no secrets)."""
+
+    xf = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    scheme = getattr(request.url, "scheme", "") or ""
+    inferred_https = xf == "https" or scheme == "https"
+    cookie_secure_applied = _cookie_secure(request)
+    raw_cs = os.getenv("ADMIN_COOKIE_SECURE", "").strip()
+
+    hints: list[str] = []
+    if cookie_secure_applied and not inferred_https:
+        hints.append(
+            "كعكة الجلسة مع Secure على اتصال HTTP غالباً لا تُخزَّن — عيّن ADMIN_COOKIE_SECURE=false أو اتركه فارغاً للتلقائي."
+        )
+    if not (os.getenv("ADMIN_USERNAME") or "").strip():
+        hints.append("ADMIN_USERNAME غير معيّن.")
+    if os.getenv("ADMIN_PASSWORD") in (None, ""):
+        hints.append("ADMIN_PASSWORD غير معيّن.")
+    if not (os.getenv("ADMIN_SESSION_SECRET") or "").strip():
+        hints.append("ADMIN_SESSION_SECRET غير معيّن.")
+
+    return {
+        "admin_enabled": _admin_enabled(),
+        "credentials_username_set": bool((os.getenv("ADMIN_USERNAME") or "").strip()),
+        "credentials_password_set": os.getenv("ADMIN_PASSWORD") not in (None, ""),
+        "session_secret_set": bool((os.getenv("ADMIN_SESSION_SECRET") or "").strip()),
+        "cookie_secure_env_raw": raw_cs or None,
+        "cookie_secure_applied": cookie_secure_applied,
+        "request_scheme": scheme or None,
+        "forwarded_proto": xf or None,
+        "hints": hints,
+    }
+
+
 @router.post("/admin/login")
-def admin_login(body: LoginBody, response: Response):
+def admin_login(request: Request, body: LoginBody, response: Response):
     if not _admin_enabled():
         raise HTTPException(status_code=404, detail="Not found")
     exp_user = (os.getenv("ADMIN_USERNAME") or "").strip()
@@ -109,7 +163,7 @@ def admin_login(body: LoginBody, response: Response):
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=_cookie_secure(),
+        secure=_cookie_secure(request),
         samesite="lax",
         max_age=43200,
         path="/",
@@ -118,11 +172,11 @@ def admin_login(body: LoginBody, response: Response):
 
 
 @router.post("/admin/logout")
-def admin_logout(response: Response, _: str = Depends(require_admin_user)):
+def admin_logout(request: Request, response: Response, _: str = Depends(require_admin_user)):
     response.delete_cookie(
         key=COOKIE_NAME,
         path="/",
-        secure=_cookie_secure(),
+        secure=_cookie_secure(request),
         httponly=True,
         samesite="lax",
     )
