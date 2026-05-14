@@ -96,7 +96,7 @@ Until the origin returns **200** JSON for `/health`, public `https://api.nabtala
 
 ## Google Sheet (orders row)
 
-Payload fields: **date** (`dd/mm/yyyy` Riyadh), **order_id** (`SHEET_ORDER_ID_PREFIX` + tail of `nabta-…`, default **`nama-2026-000001`** style), **country** `KSA`, **name**, **phone** `9665…` (digits, no `+`), **product** / **sku** / **quantity** slash-separated (Arabic short product titles + stable SKUs from `app/services/catalog.py`). **total_price** SAR (numeric, 2 decimals), **currency** `SAR`, **status** empty in API (Apps Script keeps STATUS column blank). Header template: **`docs/sheet/orders-template-order-csv-headers.csv`**.
+Payload fields: **date** (`dd/mm/yyyy` Riyadh), **order_id** (`SHEET_ORDER_ID_PREFIX` + tail of `nabta-…`, default **`nabta-2026-000001`** style), **country** `KSA`, **name**, **phone** `9665…` (digits, no `+`), **product** / **sku** / **quantity** slash-separated (Arabic short product titles + stable SKUs from `app/services/catalog.py`). **total_price** SAR (numeric, 2 decimals), **currency** `SAR`, **status** empty in API (Apps Script keeps STATUS column blank). Header template: **`docs/sheet/orders-template-order-csv-headers.csv`**.
 
 - Retries run on transient errors; each order persists **`sheet_error`** / **`sheet_sent_at`** (see `orders` columns). Typical failures: webhook URL typo, deployment not **Anyone**, **standalone script** without **`SPREADSHEET_ID`**, or Google returning HTML (**`non_json_response`**) instead of **`{"ok":true}`**.
 - The Apps Script Web App needs **no secret** — only paste **`GOOGLE_SHEET_WEBHOOK_URL`** in backend (optional alias **`SHEET_WEBHOOK_URL`**).

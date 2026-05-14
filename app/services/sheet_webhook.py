@@ -38,10 +38,10 @@ def _sar_total_rounded(total_sar: float) -> float:
 
 
 def sheet_order_public_id(internal_order_number: str) -> str:
-    """Public ORDERID for Sheets (``SHEET_ORDER_ID_PREFIX``). Default converts ``nabta-…`` → ``nama-…``."""
+    """Public ORDERID for Sheets (``SHEET_ORDER_ID_PREFIX``). Default keeps ``nabta-YYYY-NNNNNN`` (same as DB)."""
 
     inn = internal_order_number.strip()
-    pref = (os.getenv("SHEET_ORDER_ID_PREFIX") or "nama").strip().lower()
+    pref = (os.getenv("SHEET_ORDER_ID_PREFIX") or "nabta").strip().lower()
     if not pref:
         return inn
     if inn.startswith("nabta-"):
@@ -61,7 +61,7 @@ def build_sheet_row(
 ) -> dict[str, str | float]:
     """Maps to Spreadsheet row 1 CSV: DATE, ORDERID, COUNTRYC, NAME, PHONE, PRODUCT, SKU, QUANTITY, TOTALPRICE, CURRENCY, STATUS.
 
-    Internal ``nabta-YYYY-NNNNNN`` → public ``nama-YYYY-NNNNNN`` via ``sheet_order_public_id``. STATUS is always blank in JSON — Apps Script clears the STATUS cell too.
+    Internal ``nabta-YYYY-NNNNNN`` → public id via ``sheet_order_public_id`` (default same prefix). STATUS is always blank in JSON — Apps Script clears the STATUS cell too.
     """
 
     order_date = datetime.now(Ryadh).strftime("%d/%m/%Y")

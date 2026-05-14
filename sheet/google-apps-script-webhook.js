@@ -74,7 +74,7 @@ function validatePayload_(data) {
 
   var labels = {
     date: 'date',
-    order_id: 'order_id (nama…)',
+    order_id: 'order_id (nabta…)',
     country: 'country',
     name: 'name',
     phone: 'phone (966…)',
@@ -140,7 +140,7 @@ function doGet(e) {
       var sh = getTargetSheet_();
       sh.appendRow([
         'TEST',
-        'nama-test-' + Date.now(),
+        'nabta-test-' + Date.now(),
         'KSA',
         'Webhook',
         '966500000000',
