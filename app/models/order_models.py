@@ -8,7 +8,6 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -63,11 +62,6 @@ class Order(Base):
     maxmind_is_hosting: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     sheet_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sheet_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    cod_network_lead_id: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
-    cod_network_sent_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    cod_network_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

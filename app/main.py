@@ -24,9 +24,7 @@ from app.routers import analytics_collect as analytics_collect_router
 from app.routers import capi as capi_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
-from app.routers import cod_network_health as cod_network_health_router
 from app.routers import sheet_health as sheet_health_router
-from app.services.cod_network import _api_token, cod_network_enabled
 from app.services.sheet_webhook import _webhook_url_from_env
 
 logging.basicConfig(level=logging.INFO)
@@ -93,12 +91,6 @@ async def lifespan(app: FastAPI):
                 "[sheet] GOOGLE_SHEET_WEBHOOK_URL أو SHEET_WEBHOOK_URL فارغ في الإنتاج — الطلبات تُحفظ في Postgres "
                 "لكن لا تُرسل إلى Google Sheet. أضِف الرابط /exec في متغيرات **نفس خدمة الـ API** ثم أعد التشغيل."
             )
-        if cod_network_enabled() and _api_token():
-            logging.info("[cod_network] lead push enabled (POST …/seller/leads)")
-        elif cod_network_enabled():
-            logging.warning(
-                "[cod_network] COD_NETWORK_ENABLED but COD_NETWORK_API_TOKEN missing — leads will not be sent."
-            )
     yield
 
 
@@ -118,7 +110,6 @@ app.include_router(capi_router.router, prefix="/capi", tags=["capi"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
 app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"])
 app.include_router(sheet_health_router.router, prefix="/api", tags=["sheet"])
-app.include_router(cod_network_health_router.router, prefix="/api", tags=["cod-network"])
 app.include_router(analytics_collect_router.router, prefix="/api", tags=["analytics"])
 app.include_router(admin_dashboard_router.router, prefix="/api", tags=["admin"])
 
@@ -212,25 +203,6 @@ def ready() -> HealthResponse:
                     detail=(
                         "Postgres reachable but orders table missing — migrations not applied "
                         "(alembic upgrade head) or wrong database name vs PgWeb"
-                    ),
-                )
-            col_ok = conn.execute(
-                text(
-                    "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
-                    "WHERE table_schema = :s AND table_name = :t AND column_name = :c)"
-                ),
-                {"s": "public", "t": "orders", "c": "cod_network_lead_id"},
-            ).scalar()
-            if not col_ok:
-                logger.error(
-                    "[ready] orders table exists but cod_network_* columns missing — "
-                    "apply migration 0003 (alembic upgrade head)"
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail=(
-                        "orders table is outdated — run `alembic upgrade head` on this DATABASE_URL "
-                        "(revision 0003 adds cod_network_lead_id / cod_network_sent_at / cod_network_error)."
                     ),
                 )
     except HTTPException:
