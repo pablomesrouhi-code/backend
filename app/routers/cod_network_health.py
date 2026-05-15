@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.services.cod_network import _api_token, cod_network_enabled
+from app.services.cod_network import _api_token, cod_network_enabled, default_cod_sku
 
 router = APIRouter()
 
@@ -13,18 +13,35 @@ router = APIRouter()
 class CodNetworkStatus(BaseModel):
     enabled: bool
     token_configured: bool
+    api_connected: bool
+    cod_sku: str | None = None
+    probe_error: str | None = None
     hint: str
 
 
 def _status_response() -> CodNetworkStatus:
     token_ok = bool(_api_token())
     enabled = cod_network_enabled()
+    api_connected = False
+    cod_sku: str | None = None
+    probe_error: str | None = None
+
+    if enabled and token_ok:
+        try:
+            cod_sku = default_cod_sku()
+            api_connected = True
+        except Exception as e:
+            probe_error = str(e)[:300]
+
     return CodNetworkStatus(
         enabled=enabled,
         token_configured=token_ok,
+        api_connected=api_connected,
+        cod_sku=cod_sku,
+        probe_error=probe_error,
         hint=(
-            "In EasyPanel (API service env only): COD_NETWORK_ENABLED=true and COD_NETWORK_API_TOKEN. "
-            "SKU is picked automatically from your COD account. Restart API after saving."
+            "Env vars go in EasyPanel on the API service only (not Git). "
+            "Each checkout POSTs a lead to COD Network in parallel with Google Sheet."
         ),
     )
 
