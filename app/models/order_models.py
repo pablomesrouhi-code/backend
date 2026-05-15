@@ -68,11 +68,6 @@ class Order(Base):
         DateTime(timezone=True), nullable=True
     )
     cod_network_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    cod_network_lead_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    cod_network_sent_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    cod_network_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
