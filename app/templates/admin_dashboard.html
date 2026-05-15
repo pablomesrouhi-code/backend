@@ -384,6 +384,21 @@
 
   <script>
     const API = "";
+    const NUM_LOCALE = 'fr-FR';
+    const DATE_LOCALE = 'fr-FR';
+
+    function fmtNum(n, opts) {
+      return Number(n).toLocaleString(NUM_LOCALE, opts);
+    }
+
+    function fmtDate(iso) {
+      return new Date(iso).toLocaleString(DATE_LOCALE);
+    }
+
+    function fmtDec(n, digits) {
+      const d = digits == null ? 2 : digits;
+      return fmtNum(n, { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
 
     function todayISO() {
       const d = new Date();
@@ -422,20 +437,20 @@
           'خطأ في المقاييس (HTTP ' + r.status + '): ' + msg;
         return;
       }
-      document.getElementById('kpi-clicks').textContent = j.trusted_clicks.toLocaleString('ar-SA');
-      document.getElementById('kpi-orders').textContent = j.orders.toLocaleString('ar-SA');
+      document.getElementById('kpi-clicks').textContent = fmtNum(j.trusted_clicks);
+      document.getElementById('kpi-orders').textContent = fmtNum(j.orders);
       const cr = j.conversion_rate_percent;
       document.getElementById('kpi-cr').textContent =
-        cr == null ? '—' : `${cr.toLocaleString('ar-SA', {maximumFractionDigits:2})}%`;
-      document.getElementById('kpi-rev').textContent = j.revenue_sar.toLocaleString('ar-SA');
+        cr == null ? '—' : `${fmtDec(cr, 2)} %`;
+      document.getElementById('kpi-rev').textContent = fmtNum(j.revenue_sar);
       document.getElementById('kpi-aov').textContent =
-        j.orders ? `${j.aov_sar.toLocaleString('ar-SA', {maximumFractionDigits:2})}` : '—';
+        j.orders ? fmtDec(j.aov_sar, 2) : '—';
       const ur = j.upsell_attach_rate_percent;
       document.getElementById('kpi-upsell').textContent =
-        ur == null ? '—' : `${ur.toLocaleString('ar-SA', {maximumFractionDigits:2})}%`;
+        ur == null ? '—' : `${fmtDec(ur, 2)} %`;
       let note =
-        `مسجّل صفحات: ${j.total_page_views_recorded.toLocaleString('ar-SA')} · `
-        + `IPs موثوقة مميزة: ${j.trusted_unique_ips.toLocaleString('ar-SA')} · `
+        `مسجّل صفحات: ${fmtNum(j.total_page_views_recorded)} · `
+        + `IPs موثوقة مميزة: ${fmtNum(j.trusted_unique_ips)} · `
         + j.notes;
       if (j.warning) note += ' · تنبيه: ' + j.warning;
       document.getElementById('metrics-note').textContent = note;
@@ -458,17 +473,17 @@
         const sheetTxt = sheetOk ? 'تم الإرسال' : (o.sheet_error ? 'خطأ' : 'لم يُرسل');
         tr.innerHTML = `
           <td><span class="mono">${o.order_number}</span></td>
-          <td>${new Date(o.created_at).toLocaleString('ar-SA')}</td>
+          <td>${fmtDate(o.created_at)}</td>
           <td>${o.customer_name}</td>
           <td class="mono">${o.phone_local}</td>
-          <td>${o.total_sar.toLocaleString('ar-SA')} ر.س</td>
+          <td>${fmtNum(o.total_sar)} ر.س</td>
           <td>${o.accepted_upsell ? '<span class="pill ok">نعم</span>' : '<span class="pill">لا</span>'}</td>
           <td><span class="pill ${sheetCls}">${sheetTxt}</span></td>
           <td><button type="button" class="ghost" data-id="${o.id}">معاينة</button></td>`;
         tb.appendChild(tr);
       }
       document.getElementById('orders-meta').textContent =
-        `عرض ${j.orders.length.toLocaleString('ar-SA')} من ${j.total.toLocaleString('ar-SA')}`;
+        `عرض ${fmtNum(j.orders.length)} من ${fmtNum(j.total)}`;
       tb.querySelectorAll('button[data-id]').forEach(btn => {
         btn.addEventListener('click', () => openOrder(btn.getAttribute('data-id')));
       });
@@ -480,18 +495,18 @@
       const o = j.order;
       document.getElementById('m-title').textContent = o.order_number;
       document.getElementById('m-sub').textContent =
-        `${new Date(o.created_at).toLocaleString('ar-SA')} · ${o.status}`;
+        `${fmtDate(o.created_at)} · ${o.status}`;
       const kv = document.getElementById('m-kv');
       kv.innerHTML = '';
       const rows = [
         ['العميل', o.customer_name],
         ['الجوال', `${o.phone_local} (${o.phone_e164})`],
-        ['المجموع', `${o.total_sar.toLocaleString('ar-SA')} ر.س (شامل Upsell ${o.upsell_total_sar})`],
+        ['المجموع', `${fmtNum(o.total_sar)} ر.س (شامل Upsell ${fmtNum(o.upsell_total_sar)})`],
         ['Upsell', o.accepted_upsell ? `نعم — ${o.upsell_product_id || ''}` : 'لا'],
         ['مصدر الصفحة', o.source_page || '—'],
-        ['MaxMind', `${o.maxmind_country_iso || '—'} · score ${o.maxmind_risk_score ?? '—'} · VPN ${o.maxmind_is_vpn ?? '—'}`],
+        ['MaxMind', `${o.maxmind_country_iso || '—'} · score ${o.maxmind_risk_score != null ? fmtDec(o.maxmind_risk_score, 2) : '—'} · VPN ${o.maxmind_is_vpn ?? '—'}`],
         ['عنوان IP', o.ip_address || '—'],
-        ['الشيت', o.sheet_sent_at ? `أُرسل في ${new Date(o.sheet_sent_at).toLocaleString('ar-SA')}` : 'لم يُرسل بعد'],
+        ['الشيت', o.sheet_sent_at ? `أُرسل في ${fmtDate(o.sheet_sent_at)}` : 'لم يُرسل بعد'],
       ];
       if (o.sheet_error) rows.push(['خطأ الشيت', o.sheet_error]);
       for (const [k,v] of rows) {
@@ -507,9 +522,9 @@
         tr.innerHTML = `
           <td>${it.product_name_ar}<div style="font-size:.74rem;color:var(--muted);margin-top:4px;" class="mono">${it.product_id}</div></td>
           <td>${it.item_type}</td>
-          <td>${it.offer_qty}</td>
-          <td>${it.unit_price_sar.toLocaleString('ar-SA')}</td>
-          <td>${it.line_total_sar.toLocaleString('ar-SA')}</td>`;
+          <td>${fmtNum(it.offer_qty)}</td>
+          <td>${fmtNum(it.unit_price_sar)}</td>
+          <td>${fmtNum(it.line_total_sar)}</td>`;
         lb.appendChild(tr);
       }
       document.getElementById('order-modal').classList.add('show');
@@ -572,7 +587,7 @@
     }
 
     function usd(n) {
-      return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return new Intl.NumberFormat(NUM_LOCALE, { style: 'currency', currency: 'USD' }).format(n);
     }
 
     function renderCalcOut(el, rows) {
@@ -593,9 +608,9 @@
         document.getElementById('pc-aov-usd').value = j.aov_usd;
         document.getElementById('pc-avg-pieces').value = j.avg_pieces_per_order;
         banner.innerHTML =
-          `<strong>Lifetime store data:</strong> ${j.orders_count.toLocaleString('en-US')} orders · `
-          + `revenue ${j.revenue_sar.toLocaleString('en-US')} SAR · AOV ${j.aov_sar} SAR (${j.aov_usd} USD) · `
-          + `avg <bdi>${j.avg_pieces_per_order}</bdi> pieces/order`;
+          `<strong>Lifetime store data:</strong> ${fmtNum(j.orders_count)} orders · `
+          + `revenue ${fmtNum(j.revenue_sar)} SAR · AOV ${fmtDec(j.aov_sar, 2)} SAR (${fmtDec(j.aov_usd, 2)} USD) · `
+          + `avg <bdi>${fmtDec(j.avg_pieces_per_order, 2)}</bdi> pieces/order`;
         runBreakeven();
       } catch (e) {
         banner.textContent = 'Could not load baseline: ' + e.message;
@@ -612,18 +627,18 @@
         ['Margin per lead', usd(margin), margin >= 0 ? 'pos' : 'neg'],
         ['COD revenue / lead', usd(r.revenue), ''],
         ['Ops + COGS / lead (excl. ads)', usd(r.totalCost - r.adSpend), ''],
-        ['Confirmed / lead', r.confirmed.toFixed(3), ''],
-        ['Delivered / lead', r.delivered.toFixed(3), ''],
+        ['Confirmed / lead', fmtDec(r.confirmed, 3), ''],
+        ['Delivered / lead', fmtDec(r.delivered, 3), ''],
       ]);
     }
 
     function runScale() {
       const r = pcCalc(pcInputs(pcNum('pc-leads')));
       renderCalcOut(document.getElementById('pc-scale-out'), [
-        ['Leads', r.leads.toLocaleString('en-US'), ''],
-        ['Confirmed', r.confirmed.toFixed(1), ''],
-        ['Delivered', r.delivered.toFixed(1), ''],
-        ['Returns', r.returned.toFixed(1), ''],
+        ['Leads', fmtNum(r.leads), ''],
+        ['Confirmed', fmtDec(r.confirmed, 1), ''],
+        ['Delivered', fmtDec(r.delivered, 1), ''],
+        ['Returns', fmtDec(r.returned, 1), ''],
         ['Revenue (COD)', usd(r.revenue), 'pos'],
         ['Ad spend', usd(r.adSpend), ''],
         ['Confirmation fees', usd(r.feeConfirmed), ''],
