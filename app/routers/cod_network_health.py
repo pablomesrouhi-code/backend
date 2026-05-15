@@ -23,9 +23,8 @@ def _status_response() -> CodNetworkStatus:
         enabled=enabled,
         token_configured=token_ok,
         hint=(
-            "Set COD_NETWORK_ENABLED=true, COD_NETWORK_API_TOKEN, and COD_NETWORK_SKU_MAP "
-            "(or COD_NETWORK_DEFAULT_SKU) on the API service, then restart. "
-            "After a test order, check orders.cod_network_sent_at / cod_network_error in Postgres."
+            "In EasyPanel (API service env only): COD_NETWORK_ENABLED=true and COD_NETWORK_API_TOKEN. "
+            "SKU is picked automatically from your COD account. Restart API after saving."
         ),
     )
 

@@ -19,6 +19,8 @@ from app.services.sheet_webhook import sheet_order_public_id
 
 logger = logging.getLogger(__name__)
 
+_cached_default_sku: str | None = None
+
 
 def cod_network_enabled() -> bool:
     flag = (os.getenv("COD_NETWORK_ENABLED") or "").strip().lower()
@@ -39,38 +41,56 @@ def _api_base() -> str:
     ).strip().rstrip("/")
 
 
-def _sku_map() -> dict[str, str]:
-    """``COD_NETWORK_SKU_MAP=rawnaq-c:SLOFHA,laylmag:SLOFHA`` (product_id → COD SKU)."""
+def _fetch_default_sku_from_api() -> str:
+    token = _api_token()
+    base = _api_base()
+    if not token or not base:
+        raise ValueError("COD Network API token or base URL missing")
 
-    out: dict[str, str] = {}
-    raw = (os.getenv("COD_NETWORK_SKU_MAP") or "").strip()
-    if raw:
-        for part in raw.split(","):
-            piece = part.strip()
-            if not piece or ":" not in piece:
-                continue
-            pid, sku = piece.split(":", 1)
-            pid = pid.strip().lower()
-            sku = sku.strip()
-            if pid and sku:
-                out[pid] = sku
-    default = (os.getenv("COD_NETWORK_DEFAULT_SKU") or "").strip()
-    if default and "*" not in out:
-        out.setdefault("*", default)
-    return out
+    url = f"{base}/products"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "User-Agent": "NabtalaboBackend/1.0 (+cod-network products)",
+    }
+    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+        resp = client.get(url, headers=headers)
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict) or body.get("status") != "success":
+        raise ValueError("COD Network products API returned unexpected response")
+    data = body.get("data")
+    if not isinstance(data, list) or not data:
+        raise ValueError("COD Network account has no products")
+    first = data[0]
+    if not isinstance(first, dict):
+        raise ValueError("COD Network products entry invalid")
+    sku = str(first.get("sku") or "").strip()
+    if not sku:
+        raise ValueError("COD Network first product has no sku")
+    logger.info("[cod_network] default_sku_from_api=%s", sku)
+    return sku
 
 
-def resolve_cod_sku(product_id: str) -> str:
-    key = product_id.strip().lower()
-    mapping = _sku_map()
-    if key in mapping:
-        return mapping[key]
-    if "*" in mapping:
-        return mapping["*"]
-    default = (os.getenv("COD_NETWORK_DEFAULT_SKU") or "").strip()
-    if default:
-        return default
-    raise ValueError(f"No COD Network SKU for product_id={product_id}")
+def default_cod_sku() -> str:
+    """Seller SKU: optional ``COD_NETWORK_DEFAULT_SKU``, else first product from COD API."""
+
+    global _cached_default_sku
+    if _cached_default_sku:
+        return _cached_default_sku
+
+    explicit = (os.getenv("COD_NETWORK_DEFAULT_SKU") or "").strip()
+    if explicit:
+        _cached_default_sku = explicit
+        return explicit
+
+    try:
+        _cached_default_sku = _fetch_default_sku_from_api()
+    except Exception as e:
+        raise ValueError(
+            "Could not resolve COD Network SKU — set COD_NETWORK_DEFAULT_SKU or fix API token"
+        ) from e
+    return _cached_default_sku
 
 
 def _phone_e164(phone_e164: str, phone_digits: str) -> str:
@@ -99,15 +119,15 @@ def build_cod_network_lead_payload(
 ) -> dict[str, Any]:
     """Build JSON body for ``POST {base}/leads``."""
 
-    qty_by_sku: dict[str, int] = {}
+    total_qty = 0
     for product_id, qty in lines:
         resolve_product(product_id)
-        sku = resolve_cod_sku(product_id)
-        qty_by_sku[sku] = qty_by_sku.get(sku, 0) + int(qty)
-
-    items = [{"sku": sku, "quantity": q} for sku, q in sorted(qty_by_sku.items())]
-    if not items:
+        total_qty += int(qty)
+    if total_qty < 1:
         raise ValueError("empty items for COD Network lead")
+
+    sku = default_cod_sku()
+    items = [{"sku": sku, "quantity": total_qty}]
 
     payload: dict[str, Any] = {
         "phone": _phone_e164(phone_e164, phone_digits),
