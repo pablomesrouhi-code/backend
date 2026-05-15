@@ -354,6 +354,62 @@ def _dec(v: Decimal | None) -> float | None:
     return float(v)
 
 
+def _sar_per_usd() -> float:
+    """SAR per 1 USD (e.g. 3.75). USD = SAR / rate."""
+
+    raw = os.getenv("SAR_PER_USD", "3.75").strip()
+    try:
+        v = float(raw)
+        return v if v > 0 else 3.75
+    except ValueError:
+        return 3.75
+
+
+@router.get("/admin/data/profit-baseline")
+def admin_profit_baseline(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    """Lifetime store stats for COD profit calculator (AOV + avg pieces per order)."""
+
+    rate = _sar_per_usd()
+    orders_count = int(db.scalar(select(func.count()).select_from(Order)) or 0)
+    revenue_sar = int(db.scalar(select(func.coalesce(func.sum(Order.total_sar), 0))) or 0)
+    aov_sar = round(revenue_sar / orders_count, 2) if orders_count else 0.0
+    aov_usd = round(aov_sar / rate, 2) if orders_count and rate > 0 else 0.0
+
+    pieces_subq = (
+        select(
+            OrderItem.order_id.label("order_id"),
+            func.sum(OrderItem.offer_qty).label("pieces"),
+        )
+        .group_by(OrderItem.order_id)
+        .subquery()
+    )
+    avg_pieces_raw = db.scalar(select(func.avg(pieces_subq.c.pieces)))
+    avg_pieces = round(float(avg_pieces_raw or 0), 3) if orders_count else 0.0
+
+    return {
+        "orders_count": orders_count,
+        "revenue_sar": revenue_sar,
+        "aov_sar": aov_sar,
+        "aov_usd": aov_usd,
+        "avg_pieces_per_order": avg_pieces,
+        "sar_per_usd": rate,
+        "fixed_costs_usd": {
+            "per_confirmed_lead": 1.7,
+            "per_delivered_order": 4.0,
+            "per_return_order": 1.3,
+            "per_fulfilled_shipment": 0.8,
+        },
+        "notes": (
+            "avg_pieces_per_order = mean sum(offer_qty) per order (all line items). "
+            "Fulfilled fee applied per confirmed order (warehouse ship). "
+            "Return fee on confirmed − delivered."
+        ),
+    }
+
+
 @router.get("/admin/data/orders/{order_id}")
 def admin_order_detail(
     order_id: str,
