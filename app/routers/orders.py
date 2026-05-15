@@ -7,7 +7,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
@@ -191,7 +191,7 @@ def create_order(
 
     try:
         db.commit()
-    except SQLAlchemyError:
+    except SQLAlchemyError as e:
         logger.exception(
             "[orders] POSTGRES_COMMIT_FAILED order_number=%s order_id=%s — DB down, migration missing, "
             "or permissions. Check DATABASE_URL matches PgWeb + run alembic.",
@@ -199,10 +199,16 @@ def create_order(
             order_id,
         )
         db.rollback()
-        raise HTTPException(
-            status_code=503,
-            detail="تعذر حفظ الطلب في قاعدة البيانات. راجعوا سجلات الـ API وأحوال PostgreSQL.",
-        ) from None
+        detail = "تعذر حفظ الطلب في قاعدة البيانات. راجعوا سجلات الـ API وأحوال PostgreSQL."
+        if isinstance(e, ProgrammingError):
+            raw = str(getattr(e, "orig", e) or e)
+            low = raw.lower()
+            if "column" in low and "does not exist" in low:
+                detail += (
+                    " إن كان خطأ Postgres يذكر عموداً ناقصاً: نفِّذ `alembic upgrade head` على نفس قاعدة البيانات "
+                    "(migration 0003 — أعمدة cod_network) أو أعد نشر الـ backend بعد إصلاح المهاجرات."
+                )
+        raise HTTPException(status_code=503, detail=detail) from None
 
     sheet_lines: list[tuple[str, int]] = list(zip(product_keys, quantities, strict=True))
     if body.accepted_upsell and body.upsell_product_id:
