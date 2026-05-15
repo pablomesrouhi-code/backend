@@ -203,33 +203,36 @@ def ready() -> HealthResponse:
                 ),
                 {"s": "public", "t": "orders"},
             ).scalar()
-        if not orders_ok:
-            logger.error("[ready] connected but public.orders table is missing — run alembic on this DATABASE_URL")
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Postgres reachable but orders table missing — migrations not applied "
-                    "(alembic upgrade head) or wrong database name vs PgWeb"
+            if not orders_ok:
+                logger.error(
+                    "[ready] connected but public.orders table is missing — run alembic on this DATABASE_URL"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Postgres reachable but orders table missing — migrations not applied "
+                        "(alembic upgrade head) or wrong database name vs PgWeb"
+                    ),
+                )
+            col_ok = conn.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    "WHERE table_schema = :s AND table_name = :t AND column_name = :c)"
                 ),
-            )
-        col_ok = conn.execute(
-            text(
-                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
-                "WHERE table_schema = :s AND table_name = :t AND column_name = :c)"
-            ),
-            {"s": "public", "t": "orders", "c": "cod_network_lead_id"},
-        ).scalar()
-        if not col_ok:
-            logger.error(
-                "[ready] orders table exists but cod_network_* columns missing — apply migration 0003 (alembic upgrade head)"
-            )
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "orders table is outdated — run `alembic upgrade head` on this DATABASE_URL "
-                    "(revision 0003 adds cod_network_lead_id / cod_network_sent_at / cod_network_error)."
-                ),
-            )
+                {"s": "public", "t": "orders", "c": "cod_network_lead_id"},
+            ).scalar()
+            if not col_ok:
+                logger.error(
+                    "[ready] orders table exists but cod_network_* columns missing — "
+                    "apply migration 0003 (alembic upgrade head)"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "orders table is outdated — run `alembic upgrade head` on this DATABASE_URL "
+                        "(revision 0003 adds cod_network_lead_id / cod_network_sent_at / cod_network_error)."
+                    ),
+                )
     except HTTPException:
         raise
     except Exception:
