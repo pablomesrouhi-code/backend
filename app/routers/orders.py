@@ -17,6 +17,11 @@ from app.schemas.order_create import CreateOrderRequest, CreateOrderResponse
 from app.services.catalog import resolve_product
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
+from app.services.cod_network import (
+    apply_cod_network_delivery_to_order,
+    build_cod_network_lead_payload,
+    cod_network_enabled,
+)
 from app.services.sheet_webhook import apply_sheet_delivery_to_order, build_sheet_row
 from app.request_ip import client_ip
 from app.services.maxmind_fraud import evaluate_order_fraud
@@ -35,6 +40,12 @@ async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str 
     """Run sync sheet POST in a worker thread so it always runs after the HTTP response (reliable with ASGI)."""
 
     await asyncio.to_thread(apply_sheet_delivery_to_order, order_id, payload)
+
+
+async def _run_cod_network_delivery_async(
+    order_id: uuid.UUID, payload: dict[str, object]
+) -> None:
+    await asyncio.to_thread(apply_cod_network_delivery_to_order, order_id, payload)
 
 
 @router.post("/orders", response_model=CreateOrderResponse)
@@ -217,6 +228,36 @@ def create_order(
         except SQLAlchemyError:
             logger.exception("[orders] persist_sheet_build_error_failed order_id=%s", order_id)
             db.rollback()
+
+    if cod_network_enabled():
+        try:
+            cod_payload = build_cod_network_lead_payload(
+                customer_name=body.customer_name,
+                phone_e164=phone_e164,
+                phone_digits=phone_digits,
+                order_number=order_number,
+                lines=sheet_lines,
+                source_page=body.source_page,
+                total_sar=float(subtotal + upsell_total),
+            )
+            background_tasks.add_task(_run_cod_network_delivery_async, order_id, cod_payload)
+            logger.info(
+                "[orders] COD_NETWORK_ENQUEUED order_number=%s order_id=%s",
+                order_number,
+                order_id,
+            )
+        except Exception:
+            logger.exception("[orders] cod_network_payload_failed order_number=%s", order_number)
+            try:
+                o_row = db.get(Order, order_id)
+                if o_row is not None:
+                    o_row.cod_network_error = "cod_network_payload_failed_see_api_logs"
+                    db.commit()
+            except SQLAlchemyError:
+                logger.exception(
+                    "[orders] persist_cod_network_build_error_failed order_id=%s", order_id
+                )
+                db.rollback()
 
     logger.info(
         "[orders] SAVED_OK order_number=%s order_id=%s total_sar=%s line_items=%s accepted_upsell=%s",

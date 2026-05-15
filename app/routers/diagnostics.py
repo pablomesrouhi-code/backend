@@ -16,6 +16,10 @@ from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal, get_engine
 from app.models.order_models import Order
+from app.services.cod_network import (
+    rebuild_cod_network_payload_from_persisted_order,
+    send_cod_network_lead,
+)
 from app.services.sheet_webhook import (
     _webhook_url_from_env,
     rebuild_sheet_payload_from_persisted_order,
@@ -125,6 +129,69 @@ def resend_sheet_row_manual(
             "ok": outcome == "ok",
             "outcome": outcome,
             "detail": sheet_err,
+            "order_number": order.order_number,
+            "order_id": str(order.id),
+        }
+    finally:
+        db.close()
+
+
+@router.post("/resend-cod-network-lead")
+def resend_cod_network_lead_manual(
+    body: ResendSheetRequest,
+    token: str | None = Query(None, alias="token"),
+) -> dict[str, Any]:
+    """Rebuild COD Network lead JSON from DB and POST again. Requires token."""
+    _require_token(token)
+    oid_raw = (body.order_id or "").strip()
+    on_raw = (body.order_number or "").strip()
+    if not oid_raw and not on_raw:
+        raise HTTPException(status_code=400, detail="Provide order_id or order_number")
+
+    try:
+        get_engine()
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+    db = SessionLocal()
+    try:
+        stmt = select(Order).options(selectinload(Order.items))
+        if oid_raw:
+            try:
+                oid = uuid.UUID(oid_raw)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="invalid order_id UUID") from e
+            order = db.execute(stmt.where(Order.id == oid)).scalar_one_or_none()
+        else:
+            order = db.execute(stmt.where(Order.order_number == on_raw)).scalar_one_or_none()
+
+        if order is None:
+            raise HTTPException(status_code=404, detail="order not found")
+
+        payload = rebuild_cod_network_payload_from_persisted_order(order)
+        outcome, err, lead_id = send_cod_network_lead(payload)
+
+        if outcome == "ok":
+            order.cod_network_sent_at = datetime.now(UTC)
+            order.cod_network_error = None
+            if lead_id is not None:
+                order.cod_network_lead_id = lead_id
+        elif outcome == "failed":
+            order.cod_network_error = (err or "unknown")[:4000]
+        else:
+            order.cod_network_error = (err or "cod_skipped")[:4000]
+
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(status_code=503, detail="failed to persist cod_network_* after resend")
+
+        return {
+            "ok": outcome == "ok",
+            "outcome": outcome,
+            "detail": err,
+            "lead_id": lead_id,
             "order_number": order.order_number,
             "order_id": str(order.id),
         }

@@ -94,6 +94,19 @@ class LoginBody(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+def _frontend_base_url() -> str:
+    return (os.getenv("FRONTEND_URL", "https://nabtalabo.store").strip() or "https://nabtalabo.store").rstrip(
+        "/"
+    )
+
+
+def _brand_logo_url() -> str:
+    path = (os.getenv("ADMIN_BRAND_LOGO_PATH", "/nabta-lab-brand.png") or "/nabta-lab-brand.png").strip()
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{_frontend_base_url()}{path}"
+
+
 @router.get("/admin")
 def admin_ui(request: Request):
     if not _admin_enabled():
@@ -103,7 +116,11 @@ def admin_ui(request: Request):
     return _TEMPLATES.TemplateResponse(
         request=request,
         name="admin_dashboard.html",
-        context={"authed": authed},
+        context={
+            "authed": authed,
+            "brand_logo_url": _brand_logo_url(),
+            "brand_site_url": _frontend_base_url(),
+        },
     )
 
 
