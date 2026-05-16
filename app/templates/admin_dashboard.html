@@ -412,6 +412,7 @@
         <label class="field">SAR per 1 USD<input type="number" id="pc-sar-usd" step="0.01" min="0.01" value="3.75"/></label>
         <label class="field">AOV (USD)<input type="number" id="pc-aov-usd" step="0.01" min="0"/></label>
         <label class="field">Avg pieces / order<input type="number" id="pc-avg-pieces" step="0.01" min="0"/></label>
+        <label class="field">Selling price / piece (USD)<input type="number" id="pc-selling-price" step="0.01" min="0"/></label>
         <label class="field">Product cost / piece (USD)<input type="number" id="pc-product-cost" step="0.01" min="0" value="0"/></label>
         <label class="field">Cost per lead (USD)<input type="number" id="pc-cpl" step="0.01" min="0" value="0"/></label>
         <label class="field">Confirmation rate (%)<input type="number" id="pc-conf-pct" step="0.1" min="0" max="100" value="50"/></label>
@@ -623,14 +624,39 @@
       return Number.isFinite(v) ? v : 0;
     }
 
+    function pcSellingFromAov(aovUsd, avgPieces) {
+      return avgPieces > 0 && aovUsd > 0 ? aovUsd / avgPieces : 0;
+    }
+
+    function syncSellingFromAov() {
+      const el = document.getElementById('pc-selling-price');
+      const v = pcSellingFromAov(pcNum('pc-aov-usd'), pcNum('pc-avg-pieces'));
+      el.value = v > 0 ? v.toFixed(2) : '';
+    }
+
+    function syncAovFromSelling() {
+      const selling = pcNum('pc-selling-price');
+      const avg = pcNum('pc-avg-pieces');
+      if (selling > 0 && avg > 0) {
+        document.getElementById('pc-aov-usd').value = (selling * avg).toFixed(2);
+      }
+    }
+
     function pcInputs(leads) {
+      const avgPieces = pcNum('pc-avg-pieces');
+      const aovUsd = pcNum('pc-aov-usd');
+      let sellingPrice = pcNum('pc-selling-price');
+      if (sellingPrice <= 0 && avgPieces > 0 && aovUsd > 0) {
+        sellingPrice = aovUsd / avgPieces;
+      }
       return {
         leads,
         cpl: pcNum('pc-cpl'),
         rConf: Math.min(1, Math.max(0, pcNum('pc-conf-pct') / 100)),
         rDel: Math.min(1, Math.max(0, pcNum('pc-del-pct') / 100)),
-        aovUsd: pcNum('pc-aov-usd'),
-        avgPieces: pcNum('pc-avg-pieces'),
+        aovUsd,
+        avgPieces,
+        sellingPrice,
         productCost: pcNum('pc-product-cost'),
       };
     }
@@ -641,6 +667,7 @@
       const delivered = confirmed * inp.rDel;
       const returned = confirmed - delivered;
       const revenue = delivered * inp.aovUsd;
+      const marginPerPiece = inp.sellingPrice - inp.productCost;
       const adSpend = L * inp.cpl;
       const feeConfirmed = confirmed * PC_FEES.CONFIRMED;
       const feeDelivered = delivered * PC_FEES.DELIVERED;
@@ -657,6 +684,10 @@
       return {
         leads: L, confirmed, delivered, returned, revenue, adSpend,
         feeConfirmed, feeDelivered, feeReturn, feeFulfill, cogs, totalCost, profit, maxCpl,
+        sellingPrice: inp.sellingPrice,
+        marginPerPiece,
+        grossMarginPct:
+          inp.sellingPrice > 0 ? (marginPerPiece / inp.sellingPrice) * 100 : 0,
       };
     }
 
@@ -681,10 +712,14 @@
         document.getElementById('pc-sar-usd').value = j.sar_per_usd;
         document.getElementById('pc-aov-usd').value = j.aov_usd;
         document.getElementById('pc-avg-pieces').value = j.avg_pieces_per_order;
+        const sellUsd = j.selling_price_per_piece_usd ?? pcSellingFromAov(j.aov_usd, j.avg_pieces_per_order);
+        const sellSar = j.selling_price_per_piece_sar ?? (j.avg_pieces_per_order > 0 ? j.aov_sar / j.avg_pieces_per_order : 0);
+        document.getElementById('pc-selling-price').value = sellUsd > 0 ? sellUsd.toFixed(2) : '';
         banner.innerHTML =
           `<strong>Lifetime store data:</strong> ${fmtNum(j.orders_count)} orders · `
           + `revenue ${fmtNum(j.revenue_sar)} SAR · AOV ${fmtDec(j.aov_sar, 2)} SAR (${fmtDec(j.aov_usd, 2)} USD) · `
-          + `avg <bdi>${fmtDec(j.avg_pieces_per_order, 2)}</bdi> pieces/order`;
+          + `avg <bdi>${fmtDec(j.avg_pieces_per_order, 2)}</bdi> pieces/order · `
+          + `selling ${fmtDec(sellSar, 2)} SAR / pc (${fmtDec(sellUsd, 2)} USD)`;
         runBreakeven();
       } catch (e) {
         banner.textContent = 'Could not load baseline: ' + e.message;
@@ -696,6 +731,10 @@
       const cpl = pcNum('pc-cpl');
       const margin = r.maxCpl - cpl;
       renderCalcOut(document.getElementById('pc-breakeven-out'), [
+        ['Selling price / piece', usd(r.sellingPrice), ''],
+        ['Product cost / piece', usd(pcNum('pc-product-cost')), ''],
+        ['Gross margin / piece', usd(r.marginPerPiece), r.marginPerPiece >= 0 ? 'pos' : 'neg'],
+        ['Gross margin %', `${fmtDec(r.grossMarginPct, 1)} %`, r.grossMarginPct >= 0 ? 'pos' : 'neg'],
         ['Max CPL (breakeven)', usd(r.maxCpl), r.maxCpl > 0 ? 'pos' : 'neg'],
         ['Your CPL', usd(cpl), ''],
         ['Margin per lead', usd(margin), margin >= 0 ? 'pos' : 'neg'],
@@ -709,10 +748,13 @@
     function runScale() {
       const r = pcCalc(pcInputs(pcNum('pc-leads')));
       renderCalcOut(document.getElementById('pc-scale-out'), [
+        ['Selling price / piece', usd(r.sellingPrice), ''],
+        ['Gross margin / piece', usd(r.marginPerPiece), r.marginPerPiece >= 0 ? 'pos' : 'neg'],
         ['Leads', fmtNum(r.leads), ''],
         ['Confirmed', fmtDec(r.confirmed, 1), ''],
         ['Delivered', fmtDec(r.delivered, 1), ''],
         ['Returns', fmtDec(r.returned, 1), ''],
+        ['Pieces delivered (est.)', fmtDec(r.delivered * pcNum('pc-avg-pieces'), 1), ''],
         ['Revenue (COD)', usd(r.revenue), 'pos'],
         ['Ad spend', usd(r.adSpend), ''],
         ['Confirmation fees', usd(r.feeConfirmed), ''],
@@ -742,11 +784,24 @@
         const rate = pcNum('pc-sar-usd');
         if (rate > 0) {
           document.getElementById('pc-aov-usd').value = (profitBaseline.aov_sar / rate).toFixed(2);
+          syncSellingFromAov();
         }
       }
       runBreakeven();
     });
-    ['pc-aov-usd','pc-avg-pieces','pc-product-cost','pc-cpl','pc-conf-pct','pc-del-pct'].forEach((id) => {
+    document.getElementById('pc-aov-usd').addEventListener('input', () => {
+      syncSellingFromAov();
+      runBreakeven();
+    });
+    document.getElementById('pc-avg-pieces').addEventListener('input', () => {
+      syncSellingFromAov();
+      runBreakeven();
+    });
+    document.getElementById('pc-selling-price').addEventListener('input', () => {
+      syncAovFromSelling();
+      runBreakeven();
+    });
+    ['pc-product-cost','pc-cpl','pc-conf-pct','pc-del-pct'].forEach((id) => {
       document.getElementById(id).addEventListener('input', () => {
         runBreakeven();
       });

@@ -405,6 +405,8 @@ def admin_profit_baseline(
     )
     avg_pieces_raw = db.scalar(select(func.avg(pieces_subq.c.pieces)))
     avg_pieces = round(float(avg_pieces_raw or 0), 3) if orders_count else 0.0
+    selling_price_usd = round(aov_usd / avg_pieces, 2) if avg_pieces > 0 and aov_usd > 0 else 0.0
+    selling_price_sar = round(aov_sar / avg_pieces, 2) if avg_pieces > 0 and aov_sar > 0 else 0.0
 
     return {
         "orders_count": orders_count,
@@ -412,6 +414,8 @@ def admin_profit_baseline(
         "aov_sar": aov_sar,
         "aov_usd": aov_usd,
         "avg_pieces_per_order": avg_pieces,
+        "selling_price_per_piece_usd": selling_price_usd,
+        "selling_price_per_piece_sar": selling_price_sar,
         "sar_per_usd": rate,
         "fixed_costs_usd": {
             "per_confirmed_lead": 1.7,
