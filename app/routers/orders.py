@@ -18,6 +18,7 @@ from app.services.catalog import resolve_product
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
 from app.services.sheet_webhook import apply_sheet_delivery_to_order, build_sheet_row
+from app.services.telegram_notify import notify_new_order
 from app.request_ip import client_ip
 from app.services.maxmind_fraud import evaluate_order_fraud
 from app.services.pricing import (
@@ -35,6 +36,26 @@ async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str 
     """Run sync sheet POST in a worker thread so it always runs after the HTTP response (reliable with ASGI)."""
 
     await asyncio.to_thread(apply_sheet_delivery_to_order, order_id, payload)
+
+
+async def _run_telegram_order_notify_async(
+    *,
+    order_number: str,
+    customer_name: str,
+    phone_local: str,
+    total_sar: int,
+    lines: list[tuple[str, int]],
+    accepted_upsell: bool,
+) -> None:
+    await asyncio.to_thread(
+        notify_new_order,
+        order_number=order_number,
+        customer_name=customer_name,
+        phone_local=phone_local,
+        total_sar=total_sar,
+        lines=lines,
+        accepted_upsell=accepted_upsell,
+    )
 
 
 @router.post("/orders", response_model=CreateOrderResponse)
@@ -202,6 +223,16 @@ def create_order(
     sheet_lines: list[tuple[str, int]] = list(zip(product_keys, quantities, strict=True))
     if body.accepted_upsell and body.upsell_product_id:
         sheet_lines.append((body.upsell_product_id.strip().lower(), 1))
+
+    background_tasks.add_task(
+        _run_telegram_order_notify_async,
+        order_number=order_number,
+        customer_name=body.customer_name,
+        phone_local=phone_local,
+        total_sar=subtotal + upsell_total,
+        lines=sheet_lines,
+        accepted_upsell=body.accepted_upsell,
+    )
 
     try:
         sheet_payload = build_sheet_row(

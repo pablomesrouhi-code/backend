@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.services.phone_sa import normalize_sa_phone
 from app.services.sheet_webhook import build_marketing_lead_sheet_row, send_google_sheet_webhook
+from app.services.telegram_notify import notify_marketing_lead
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -43,13 +44,27 @@ def _require_sheet_lead_ingest_secret(x_secret: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid X-Sheet-Lead-Ingest-Secret")
 
 
-def _deliver_marketing_lead_row(payload: dict[str, str | int]) -> None:
+def _deliver_marketing_lead_row(
+    payload: dict[str, str | int],
+    *,
+    customer_name: str,
+    phone_local: str,
+    total_sar: float,
+    lines: list[tuple[str, int]],
+) -> None:
     outcome, err = send_google_sheet_webhook(payload)
     logger.info(
         "[sheet_leads] marketing_lead SEND_DONE order_id=%s outcome=%s detail=%s",
         payload.get("order_id"),
         outcome,
         (err[:200] if err else None),
+    )
+    notify_marketing_lead(
+        sheet_order_id=str(payload.get("order_id") or ""),
+        customer_name=customer_name,
+        phone_local=phone_local,
+        total_sar=total_sar,
+        lines=lines,
     )
 
 
@@ -81,7 +96,14 @@ def post_marketing_lead_sheet_row(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    background_tasks.add_task(_deliver_marketing_lead_row, payload)
+    background_tasks.add_task(
+        _deliver_marketing_lead_row,
+        payload,
+        customer_name=body.customer_name,
+        phone_local=_local,
+        total_sar=body.total_sar,
+        lines=lines,
+    )
     logger.info(
         "[sheet_leads] marketing_lead ENQUEUED order_id=%s lead_event_id=%s",
         payload.get("order_id"),
