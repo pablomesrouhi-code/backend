@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.templating import Jinja2Templates
@@ -28,6 +29,7 @@ _TEMPLATES = Jinja2Templates(
 )
 
 COOKIE_NAME = "nbt_admin"
+STORE_TZ = ZoneInfo("Asia/Riyadh")
 
 
 def _public_table_exists(db: Session, table: str) -> bool:
@@ -66,7 +68,7 @@ def _cookie_secure(request: Request | None = None) -> bool:
 
 
 def _parse_day_range(start_s: str, end_s: str) -> tuple[datetime, datetime]:
-    """Inclusive calendar-day range [start, end] interpreted as UTC boundaries."""
+    """Inclusive calendar-day range [start, end] in Asia/Riyadh → UTC for DB filters."""
 
     try:
         start_d = date.fromisoformat(start_s.strip())
@@ -75,9 +77,38 @@ def _parse_day_range(start_s: str, end_s: str) -> tuple[datetime, datetime]:
         raise HTTPException(status_code=400, detail="Invalid date format — use YYYY-MM-DD") from e
     if end_d < start_d:
         raise HTTPException(status_code=400, detail="end must be >= start")
-    start_dt = datetime(start_d.year, start_d.month, start_d.day, tzinfo=timezone.utc)
-    end_dt = datetime(end_d.year, end_d.month, end_d.day, tzinfo=timezone.utc) + timedelta(days=1)
+    start_dt = datetime(start_d.year, start_d.month, start_d.day, tzinfo=STORE_TZ).astimezone(
+        timezone.utc
+    )
+    end_dt = (
+        datetime(end_d.year, end_d.month, end_d.day, tzinfo=STORE_TZ)
+        + timedelta(days=1)
+    ).astimezone(timezone.utc)
     return start_dt, end_dt
+
+
+def _today_store() -> str:
+    return datetime.now(STORE_TZ).date().isoformat()
+
+
+def _order_list_item(o: Order) -> dict[str, Any]:
+    mm = o.maxmind_risk_score
+    mm_f = float(mm) if mm is not None else None
+    return {
+        "id": str(o.id),
+        "order_number": o.order_number,
+        "created_at": o.created_at.isoformat() if o.created_at else None,
+        "customer_name": o.customer_name,
+        "phone_local": o.phone_local,
+        "total_sar": o.total_sar,
+        "status": o.status,
+        "accepted_upsell": o.accepted_upsell,
+        "source_page": o.source_page,
+        "maxmind_country_iso": o.maxmind_country_iso,
+        "maxmind_risk_score": mm_f,
+        "sheet_sent_at": o.sheet_sent_at.isoformat() if o.sheet_sent_at else None,
+        "sheet_error": o.sheet_error,
+    }
 
 
 def require_admin_user(request: Request) -> str:
@@ -209,7 +240,7 @@ def admin_metrics(
     start: str = "",
     end: str = "",
 ) -> dict[str, Any]:
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = _today_store()
     start_s = start.strip() or today
     end_s = end.strip() or today
     start_dt, end_dt = _parse_day_range(start_s, end_s)
@@ -291,7 +322,7 @@ def admin_metrics(
         upsell_rate = round(100.0 * float(upsell_orders) / float(orders_count), 3)
 
     out: dict[str, Any] = {
-        "range": {"start": start_s, "end": end_s, "timezone": "UTC"},
+        "range": {"start": start_s, "end": end_s, "timezone": "Asia/Riyadh"},
         "trusted_clicks": int(trusted_views),
         "trusted_unique_ips": int(trusted_unique_ips),
         "total_page_views_recorded": int(total_views),
@@ -311,6 +342,18 @@ def admin_metrics(
     return out
 
 
+@router.get("/admin/data/orders/latest")
+def admin_orders_latest(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Most recent orders — no date filter (for live dashboard feed)."""
+    lim = max(1, min(limit, 100))
+    rows = db.scalars(select(Order).order_by(Order.created_at.desc()).limit(lim)).all()
+    return {"orders": [_order_list_item(o) for o in rows], "limit": lim}
+
+
 @router.get("/admin/data/orders")
 def admin_orders(
     db: Session = Depends(get_db),
@@ -320,7 +363,7 @@ def admin_orders(
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = _today_store()
     start_s = start.strip() or today
     end_s = end.strip() or today
     start_dt, end_dt = _parse_day_range(start_s, end_s)
@@ -341,28 +384,14 @@ def admin_orders(
         .where(Order.created_at >= start_dt, Order.created_at < end_dt)
     ) or 0
 
-    out: list[dict[str, Any]] = []
-    for o in rows:
-        mm = o.maxmind_risk_score
-        mm_f = float(mm) if mm is not None else None
-        out.append(
-            {
-                "id": str(o.id),
-                "order_number": o.order_number,
-                "created_at": o.created_at.isoformat() if o.created_at else None,
-                "customer_name": o.customer_name,
-                "phone_local": o.phone_local,
-                "total_sar": o.total_sar,
-                "status": o.status,
-                "accepted_upsell": o.accepted_upsell,
-                "source_page": o.source_page,
-                "maxmind_country_iso": o.maxmind_country_iso,
-                "maxmind_risk_score": mm_f,
-                "sheet_sent_at": o.sheet_sent_at.isoformat() if o.sheet_sent_at else None,
-                "sheet_error": o.sheet_error,
-            }
-        )
-    return {"total": int(total), "limit": lim, "offset": off, "orders": out}
+    return {
+        "total": int(total),
+        "limit": lim,
+        "offset": off,
+        "start": start_s,
+        "end": end_s,
+        "orders": [_order_list_item(o) for o in rows],
+    }
 
 
 def _dec(v: Decimal | None) -> float | None:
@@ -405,6 +434,9 @@ def admin_profit_baseline(
     )
     avg_pieces_raw = db.scalar(select(func.avg(pieces_subq.c.pieces)))
     avg_pieces = round(float(avg_pieces_raw or 0), 3) if orders_count else 0.0
+    total_pieces = int(
+        db.scalar(select(func.coalesce(func.sum(pieces_subq.c.pieces), 0))) or 0
+    )
     selling_price_usd = round(aov_usd / avg_pieces, 2) if avg_pieces > 0 and aov_usd > 0 else 0.0
     selling_price_sar = round(aov_sar / avg_pieces, 2) if avg_pieces > 0 and aov_sar > 0 else 0.0
 
@@ -414,6 +446,7 @@ def admin_profit_baseline(
         "aov_sar": aov_sar,
         "aov_usd": aov_usd,
         "avg_pieces_per_order": avg_pieces,
+        "total_pieces": total_pieces,
         "selling_price_per_piece_usd": selling_price_usd,
         "selling_price_per_piece_sar": selling_price_sar,
         "sar_per_usd": rate,
