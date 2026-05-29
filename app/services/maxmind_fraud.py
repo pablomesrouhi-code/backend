@@ -288,7 +288,7 @@ def evaluate_order_fraud(
                 raw_response=raw_trim,
                 source="minfraud",
             )
-    el    if country_iso != allowed_country:
+    elif country_iso != allowed_country:
         logger.info(
             "[maxmind] block country=%s wanted=%s score=%s phone=%s",
             country_iso,
