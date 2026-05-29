@@ -21,6 +21,7 @@ from app.services.sheet_webhook import apply_sheet_delivery_to_order, build_shee
 from app.services.telegram_notify import notify_new_order
 from app.request_ip import client_ip
 from app.services.maxmind_fraud import evaluate_order_fraud
+from app.services.order_guard import validate_customer_name, validate_sa_mobile_local
 from app.services.pricing import (
     UPSELL_PRICE_SAR,
     allocate_line_totals,
@@ -109,10 +110,21 @@ def create_order(
         upsell_total = UPSELL_PRICE_SAR
 
     try:
+        customer_name = validate_customer_name(body.customer_name)
+    except ValueError as e:
+        logger.warning("[orders] name_invalid: %s", e)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    try:
         phone_local, phone_e164, phone_digits = normalize_sa_phone(body.phone)
+        validate_sa_mobile_local(phone_local)
     except ValueError as e:
         logger.warning("[orders] phone_invalid masked=%s: %s", mask_phone_sa(body.phone), e)
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if not phone_e164.startswith("+9665"):
+        logger.warning("[orders] phone_not_sa_mobile masked=%s", mask_phone_sa(body.phone))
+        raise HTTPException(status_code=400, detail="يرجى إدخال جوال سعودي صحيح (05XXXXXXXX).")
 
     fraud = evaluate_order_fraud(
         client_ip=client_ip(request),
@@ -142,7 +154,7 @@ def create_order(
     order = Order(
         id=order_id,
         order_number=order_number,
-        customer_name=body.customer_name.strip(),
+        customer_name=customer_name,
         phone_local=phone_local,
         phone_e164=phone_e164,
         phone_digits=phone_digits,
@@ -227,7 +239,7 @@ def create_order(
     background_tasks.add_task(
         _run_telegram_order_notify_async,
         order_number=order_number,
-        customer_name=body.customer_name,
+        customer_name=customer_name,
         phone_local=phone_local,
         total_sar=subtotal + upsell_total,
         lines=sheet_lines,
@@ -236,7 +248,7 @@ def create_order(
 
     try:
         sheet_payload = build_sheet_row(
-            customer_name=body.customer_name,
+            customer_name=customer_name,
             phone_digits=phone_digits,
             order_number=order_number,
             total_sar=subtotal + upsell_total,

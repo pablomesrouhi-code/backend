@@ -114,6 +114,16 @@ def evaluate_order_fraud(
             source="whitelist",
         )
 
+    if not phone_e164.startswith("+9665"):
+        logger.info("[maxmind] block non-SA mobile e164=%s", mask_phone_sa(phone_local))
+        return FraudEvalResult(
+            allowed=False,
+            detail=PUBLIC_BLOCK_DETAIL,
+            fields=None,
+            raw_response=None,
+            source="phone_country",
+        )
+
     account_id = (os.getenv("MAXMIND_ACCOUNT_ID") or "").strip()
     license_key = (os.getenv("MAXMIND_LICENSE_KEY") or "").strip()
     fail_closed = _env_bool("MAXMIND_FAIL_CLOSED", False)
@@ -278,12 +288,13 @@ def evaluate_order_fraud(
                 raw_response=raw_trim,
                 source="minfraud",
             )
-    elif country_iso != allowed_country:
+    el    if country_iso != allowed_country:
         logger.info(
-            "[maxmind] block country=%s wanted=%s score=%s",
+            "[maxmind] block country=%s wanted=%s score=%s phone=%s",
             country_iso,
             allowed_country,
             risk_score,
+            mask_phone_sa(phone_local),
         )
         return FraudEvalResult(
             allowed=False,
