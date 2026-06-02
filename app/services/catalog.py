@@ -4,8 +4,8 @@ from __future__ import annotations
 
 PRODUCT_NAMES: dict[str, tuple[str, str]] = {
     "rawnaq-c": (
-        "رونق C - علكات الكولاجين وفيتامين C للبشرة والشعر والأظافر",
-        "Rawnaq-C Collagen Gummies",
+        "رونق C - علكات البيوتين والزنك وفيتامين D للشعر والأظافر والبشرة",
+        "Rawnaq-C Hair Skin & Nails Gummies",
     ),
     "khiffabiotic": (
         "خفّة بيوتك - علكات البروبيوتيك والألياف",
