@@ -18,11 +18,11 @@ async def send_snap_web_event(
     custom_data: dict[str, Any],
     event_source_url: str | None = None,
     action_source: str = "WEB",
-    event_time_ms: int | None = None,
+    event_time: int | None = None,
 ) -> tuple[int, str]:
     evt: dict[str, Any] = {
         "event_name": event_name,
-        "event_time": int(event_time_ms or time.time() * 1000),
+        "event_time": int(event_time or time.time()),
         "event_id": event_id,
         "action_source": action_source,
         "user_data": user_data,

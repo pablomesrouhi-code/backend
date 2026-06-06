@@ -18,20 +18,22 @@ async def send_tiktok_web_event(
     event_id: str,
     properties: dict[str, Any],
     user: dict[str, Any],
+    page: dict[str, Any] | None = None,
     event_time: int | None = None,
 ) -> tuple[int, str]:
+    row: dict[str, Any] = {
+        "event": event_name,
+        "event_time": int(event_time or time.time()),
+        "event_id": event_id,
+        "properties": properties,
+        "user": user,
+    }
+    if page:
+        row["page"] = page
     payload = {
         "event_source": "web",
         "event_source_id": pixel_code,
-        "data": [
-            {
-                "event": event_name,
-                "event_time": int(event_time or time.time()),
-                "event_id": event_id,
-                "properties": properties,
-                "user": user,
-            }
-        ],
+        "data": [row],
     }
     headers = {"Access-Token": access_token, "Content-Type": "application/json"}
 

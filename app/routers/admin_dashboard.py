@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.admin_session import mint_admin_token, verify_admin_token
 from app.deps import get_db
 from app.models.analytics_models import AnalyticsEvent
-from app.models.order_models import Order, OrderItem
+from app.models.order_models import Order, OrderItem, TrackingEvent
 
 router = APIRouter()
 
@@ -524,4 +524,63 @@ def admin_order_detail(
             "sheet_error": o.sheet_error,
         },
         "items": lines,
+        "tracking_events": _order_tracking_events(db, oid),
     }
+
+
+def _order_tracking_events(db: Session, order_id: uuid.UUID) -> list[dict[str, Any]]:
+    if not _public_table_exists(db, "tracking_events"):
+        return []
+    rows = db.scalars(
+        select(TrackingEvent)
+        .where(TrackingEvent.order_id == order_id)
+        .order_by(TrackingEvent.created_at.asc())
+    ).all()
+    return [
+        {
+            "id": str(row.id),
+            "platform": row.platform,
+            "event_name": row.event_name,
+            "event_id": row.event_id,
+            "response_status": row.response_status,
+            "response_body": row.response_body,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+
+
+@router.get("/admin/data/capi-events")
+def admin_capi_events(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    if not _public_table_exists(db, "tracking_events"):
+        return {"events": [], "total": 0}
+
+    lim = max(1, min(limit, 200))
+    off = max(0, offset)
+    total = int(db.scalar(select(func.count()).select_from(TrackingEvent)) or 0)
+    rows = db.scalars(
+        select(TrackingEvent)
+        .order_by(TrackingEvent.created_at.desc())
+        .limit(lim)
+        .offset(off)
+    ).all()
+    events = [
+        {
+            "id": str(row.id),
+            "platform": row.platform,
+            "event_name": row.event_name,
+            "event_id": row.event_id,
+            "order_id": str(row.order_id) if row.order_id else None,
+            "response_status": row.response_status,
+            "response_body": (row.response_body or "")[:500],
+            "payload": row.payload,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+    return {"events": events, "total": total, "limit": lim, "offset": off}

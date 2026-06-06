@@ -59,6 +59,38 @@ async def _run_telegram_order_notify_async(
     )
 
 
+async def _run_order_capi_async(
+    *,
+    order_id: uuid.UUID,
+    order_number: str,
+    phone_plain: str,
+    client_ip: str | None,
+    user_agent: str | None,
+    total_sar: int,
+    content_ids: list[str],
+    source_page: str | None,
+    purchase_event_id: str | None,
+    lead_event_id: str | None,
+) -> None:
+    try:
+        from app.services.capi_dispatch import dispatch_order_capi_events
+
+        await dispatch_order_capi_events(
+            order_id=order_id,
+            order_number=order_number,
+            phone_plain=phone_plain,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            value=float(total_sar),
+            content_ids=content_ids,
+            source_url=source_page,
+            purchase_event_id=purchase_event_id,
+            lead_event_id=lead_event_id,
+        )
+    except Exception:
+        logger.exception("[orders] CAPI background dispatch failed order_id=%s", order_id)
+
+
 @router.post("/orders", response_model=CreateOrderResponse)
 def create_order(
     body: CreateOrderRequest,
@@ -244,6 +276,24 @@ def create_order(
         total_sar=subtotal + upsell_total,
         lines=sheet_lines,
         accepted_upsell=body.accepted_upsell,
+    )
+
+    capi_content_ids = list(product_keys)
+    if body.accepted_upsell and body.upsell_product_id:
+        capi_content_ids.append(body.upsell_product_id.strip().lower())
+
+    background_tasks.add_task(
+        _run_order_capi_async,
+        order_id=order_id,
+        order_number=order_number,
+        phone_plain=phone_local,
+        client_ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        total_sar=subtotal + upsell_total,
+        content_ids=capi_content_ids,
+        source_page=body.source_page,
+        purchase_event_id=body.purchase_event_id,
+        lead_event_id=body.client_event_id,
     )
 
     try:
