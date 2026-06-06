@@ -20,7 +20,7 @@ from app.tiktok_capi import send_tiktok_web_event
 logger = logging.getLogger(__name__)
 
 TIKTOK_PURCHASE = "Purchase"
-TIKTOK_LEAD = "SubmitForm"
+TIKTOK_LEAD = "Lead"
 SNAP_PURCHASE = "PURCHASE"
 SNAP_LEAD = "SIGN_UP"
 
