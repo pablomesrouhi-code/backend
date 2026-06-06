@@ -22,6 +22,7 @@ from app.db_migrate import run_upgrade_head
 from app.routers import admin_dashboard as admin_dashboard_router
 from app.routers import analytics_collect as analytics_collect_router
 from app.routers import capi as capi_router
+from app.routers import cod_network_health as cod_network_health_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
 from app.routers import sheet_health as sheet_health_router
@@ -110,6 +111,7 @@ app.include_router(capi_router.router, prefix="/capi", tags=["capi"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
 app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"])
 app.include_router(sheet_health_router.router, prefix="/api", tags=["sheet"])
+app.include_router(cod_network_health_router.router, prefix="/api", tags=["cod-network"])
 app.include_router(analytics_collect_router.router, prefix="/api", tags=["analytics"])
 app.include_router(admin_dashboard_router.router, prefix="/api", tags=["admin"])
 

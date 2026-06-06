@@ -17,6 +17,7 @@ RUN test -f app/templates/admin_dashboard.html
 # Fail Docker build immediately if upstream deploy missed new modules (easier than a crash-loop in prod).
 RUN test -f app/log_safe.py
 RUN test -f app/services/capi_dispatch.py
+RUN test -f app/services/cod_network.py
 
 EXPOSE 8000
 

@@ -108,6 +108,9 @@ def _order_list_item(o: Order) -> dict[str, Any]:
         "maxmind_risk_score": mm_f,
         "sheet_sent_at": o.sheet_sent_at.isoformat() if o.sheet_sent_at else None,
         "sheet_error": o.sheet_error,
+        "cod_network_sent_at": o.cod_network_sent_at.isoformat() if o.cod_network_sent_at else None,
+        "cod_network_error": o.cod_network_error,
+        "cod_network_lead_id": o.cod_network_lead_id,
     }
 
 
@@ -522,6 +525,9 @@ def admin_order_detail(
             "maxmind_is_hosting": o.maxmind_is_hosting,
             "sheet_sent_at": o.sheet_sent_at.isoformat() if o.sheet_sent_at else None,
             "sheet_error": o.sheet_error,
+            "cod_network_sent_at": o.cod_network_sent_at.isoformat() if o.cod_network_sent_at else None,
+            "cod_network_error": o.cod_network_error,
+            "cod_network_lead_id": o.cod_network_lead_id,
         },
         "items": lines,
         "tracking_events": _order_tracking_events(db, oid),

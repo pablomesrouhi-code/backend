@@ -743,8 +743,11 @@
         ['MaxMind', `${o.maxmind_country_iso || '—'} · score ${o.maxmind_risk_score != null ? fmtDec(o.maxmind_risk_score, 2) : '—'} · VPN ${o.maxmind_is_vpn ?? '—'}`],
         ['عنوان IP', o.ip_address || '—'],
         ['الشيت', o.sheet_sent_at ? `أُرسل في ${fmtDate(o.sheet_sent_at)}` : 'لم يُرسل بعد'],
+        ['COD Network', o.cod_network_sent_at ? `أُرسل في ${fmtDate(o.cod_network_sent_at)}` : 'لم يُرسل بعد'],
       ];
+      if (o.cod_network_lead_id) rows.push(['COD lead ID', String(o.cod_network_lead_id)]);
       if (o.sheet_error) rows.push(['خطأ الشيت', o.sheet_error]);
+      if (o.cod_network_error) rows.push(['خطأ COD Network', o.cod_network_error]);
       for (const [k,v] of rows) {
         const el = document.createElement('div');
         el.className = 'kv';
