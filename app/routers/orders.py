@@ -339,11 +339,13 @@ def create_order(
                 source_page=body.source_page,
                 total_sar=float(subtotal + upsell_total),
             )
+            cod_skus = "/".join(str(i.get("sku", "")) for i in cod_payload.get("items") or [])
             background_tasks.add_task(_run_cod_network_delivery_async, order_id, cod_payload)
             logger.info(
-                "[orders] COD_NETWORK_ENQUEUED order_number=%s order_id=%s sku=RWCFH",
+                "[orders] COD_NETWORK_ENQUEUED order_number=%s order_id=%s sku=%s",
                 order_number,
                 order_id,
+                cod_skus,
             )
         except Exception:
             logger.exception("[orders] cod_network_payload_failed order_number=%s", order_number)

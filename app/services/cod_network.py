@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import SessionLocal, get_engine
 from app.models.order_models import Order
-from app.services.catalog import resolve_product
+from app.services.catalog import resolve_product, resolve_sku
 from app.services.sheet_webhook import sheet_order_public_id
 
 logger = logging.getLogger(__name__)
@@ -83,14 +83,20 @@ def build_cod_network_lead_payload(
     """Build JSON body for ``POST {base}/leads``."""
 
     total_qty = 0
+    by_sku: dict[str, int] = {}
     for product_id, qty in lines:
-        resolve_product(product_id)
-        total_qty += int(qty)
+        pid = product_id.strip().lower()
+        resolve_product(pid)
+        q = int(qty)
+        if q < 1:
+            continue
+        sku = resolve_sku(pid)
+        by_sku[sku] = by_sku.get(sku, 0) + q
+        total_qty += q
     if total_qty < 1:
         raise ValueError("empty items for COD Network lead")
 
-    sku = default_cod_sku()
-    items = [{"sku": sku, "quantity": total_qty}]
+    items = [{"sku": sku, "quantity": quantity} for sku, quantity in by_sku.items()]
 
     payload: dict[str, Any] = {
         "phone": _phone_e164(phone_e164, phone_digits),
@@ -233,11 +239,12 @@ def send_cod_network_lead(
 def apply_cod_network_delivery_to_order(
     order_id: uuid.UUID, payload: dict[str, Any]
 ) -> None:
+    skus = ",".join(item["sku"] for item in payload.get("items") or [])
     logger.info(
         "[cod_network] SEND_START order_uuid=%s order_id=%s sku=%s",
         order_id,
         payload.get("order-id"),
-        default_cod_sku(),
+        skus or default_cod_sku(),
     )
 
     try:

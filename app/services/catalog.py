@@ -17,10 +17,10 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
     ),
 }
 
-# Stable opaque SKU per store product — random-looking codes for Sheets SKU column (unchanging per sku).
+# Seller SKU per product — used in Google Sheet webhook and COD Network leads.
 PRODUCT_SKUS: dict[str, str] = {
-    "rawnaq-c": "NBT-Q8K92MX7PL",
-    "khiffabiotic": "NBT-4RJ63WN9VK",
+    "rawnaq-c": "RWCFH",
+    "khiffabiotic": "PRBTCS",
     "laylmag": "NBT-9HZ51YT2RD",
 }
 
