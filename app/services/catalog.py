@@ -21,7 +21,7 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
 PRODUCT_SKUS: dict[str, str] = {
     "rawnaq-c": "RWCFH",
     "khiffabiotic": "PRBTCS",
-    "laylmag": "NBT-9HZ51YT2RD",
+    "laylmag": "MGAGFD",
 }
 
 
