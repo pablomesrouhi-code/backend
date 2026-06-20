@@ -469,7 +469,7 @@
       <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">Profit calculator — COD Network KSA</p>
       <p style="font-size:.84rem;color:var(--muted);margin:0 0 12px;line-height:1.5;">
         Funnel: <strong>leads</strong> × confirmation → <strong>confirmed</strong> × delivery → <strong>delivered</strong>.
-        AOV = (avg main pieces × selling price) + (upsell attach × 99 SAR). Ops fees from COD Network agreement (env <code>COD_FEE_*</code>).
+        AOV = (avg main pieces × selling price) + upsell من الطلبات. Ops fees من COD Network (env <code>COD_FEE_*</code>).
       </p>
       <div class="filters" style="margin-bottom:12px;">
         <label class="field">من
@@ -485,7 +485,7 @@
       <div class="calc-fees" id="pc-fees-row" aria-label="Fixed ops fees"></div>
       <div class="calc-block">
         <h4>Revenue &amp; product (selling price aligned)</h4>
-        <p class="hint">Selling price = weighted subtotal ÷ main pieces. AOV auto-syncs: pieces × sell + upsell % × 99 SAR.</p>
+        <p class="hint">Selling price = weighted subtotal ÷ main pieces. AOV يتحمّل تلقائياً من الطلبات (يشمل Upsell إن وُجد).</p>
         <div class="calc-grid">
         <label class="field">SAR per 1 USD<input type="number" id="pc-sar-usd" step="0.01" min="0.01" value="3.75"/></label>
         <label class="field">AOV (SAR)<input type="number" id="pc-aov-sar" step="0.01" min="0" readonly style="opacity:.85"/></label>
@@ -493,8 +493,6 @@
         <label class="field">Avg main pieces / order<input type="number" id="pc-avg-pieces" step="0.01" min="0"/></label>
         <label class="field">Selling price / piece (USD)<input type="number" id="pc-selling-price" step="0.01" min="0"/></label>
         <label class="field">Selling price / piece (SAR)<input type="number" id="pc-selling-price-sar" step="0.01" min="0"/></label>
-        <label class="field">Upsell attach (%)<input type="number" id="pc-upsell-pct" step="0.1" min="0" max="100"/></label>
-        <label class="field">Upsell price (SAR)<input type="number" id="pc-upsell-sar" step="1" min="0" value="99" readonly style="opacity:.85"/></label>
         <label class="field">Product cost / piece (USD)<input type="number" id="pc-product-cost" step="0.01" min="0" value="0"/></label>
         </div>
       </div>
@@ -875,6 +873,8 @@
     let PC_FEES_SAR = { CONFIRMED: 6.38, DELIVERED: 15, RETURN: 4.88, FULFILL: 3 };
     let profitBaseline = null;
     let pcSyncLock = false;
+    let pcUpsellAttachRate = 0;
+    let pcUpsellPriceSar = 99;
 
     function pcApplyFees(fixedUsd, fixedSar, rowId) {
       const f = fixedUsd || {
@@ -937,13 +937,12 @@
     }
 
     function pcUpsellRate() {
-      return Math.min(1, Math.max(0, pcNum('pc-upsell-pct') / 100));
+      return Math.min(1, Math.max(0, pcUpsellAttachRate));
     }
 
     function pcUpsellUsd() {
       const rate = pcNum('pc-sar-usd');
-      const upsellSar = pcNum('pc-upsell-sar') || 99;
-      return rate > 0 ? upsellSar / rate : 0;
+      return rate > 0 ? pcUpsellPriceSar / rate : 0;
     }
 
     function pcOrderValueUsd() {
@@ -1103,8 +1102,10 @@
         pcApplyFees(j.fixed_costs_usd, j.fixed_costs_sar, 'pc-fees-row');
         document.getElementById('pc-sar-usd').value = j.sar_per_usd;
         document.getElementById('pc-avg-pieces').value = j.avg_main_pieces_per_order ?? j.avg_pieces_per_order;
-        document.getElementById('pc-upsell-pct').value = j.upsell_attach_rate_percent ?? 0;
-        document.getElementById('pc-upsell-sar').value = j.upsell_price_sar ?? 99;
+        pcUpsellAttachRate = (j.upsell_attach_rate != null)
+          ? j.upsell_attach_rate
+          : (j.upsell_attach_rate_percent ?? 0) / 100;
+        pcUpsellPriceSar = j.upsell_price_sar ?? 99;
         const sellUsd = j.selling_price_per_piece_usd ?? 0;
         const sellSar = j.selling_price_per_piece_sar ?? 0;
         document.getElementById('pc-selling-price').value = sellUsd > 0 ? sellUsd.toFixed(2) : '';
@@ -1117,7 +1118,6 @@
           `<strong>Store data (${rangeTxt}):</strong> ${fmtNum(j.orders_count)} orders · `
           + `revenue ${fmtNum(j.revenue_sar)} SAR · AOV ${fmtDec(j.aov_sar, 2)} SAR (${fmtDec(j.aov_usd, 2)} USD) · `
           + `sell ${fmtDec(sellSar, 2)} SAR/pc · avg ${fmtDec(j.avg_main_pieces_per_order, 2)} main pcs · `
-          + `upsell ${fmtDec(j.upsell_attach_rate_percent, 1)}% · `
           + `computed AOV ${fmtDec(j.computed_aov_sar, 2)} SAR`;
         runAll();
       } catch (e) {
@@ -1142,7 +1142,6 @@
         ['Order value (SAR)', `${fmtDec(pcOrderValueSar(), 2)} SAR`, ''],
         ['Avg main pieces / order', fmtDec(pcNum('pc-avg-pieces'), 2), ''],
         ['Selling price / piece', usd(r.sellingPrice), ''],
-        ['Upsell attach', `${fmtDec(pcUpsellRate() * 100, 1)} %`, ''],
         ['Product cost / piece', usd(pcNum('pc-product-cost')), ''],
         ['Gross margin / piece', usd(r.marginPerPiece), r.marginPerPiece >= 0 ? 'pos' : 'neg'],
         ['Gross margin %', `${fmtDec(r.grossMarginPct, 1)} %`, r.grossMarginPct >= 0 ? 'pos' : 'neg'],
@@ -1223,10 +1222,6 @@
     });
     document.getElementById('pc-selling-price-sar').addEventListener('input', () => {
       syncSellingFromSar();
-      runAll();
-    });
-    document.getElementById('pc-upsell-pct').addEventListener('input', () => {
-      syncAovFromEconomics();
       runAll();
     });
     ['pc-product-cost','pc-cpl','pc-conf-pct','pc-del-pct','pc-leads'].forEach((id) => {
