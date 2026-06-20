@@ -21,6 +21,7 @@ from app.admin_session import mint_admin_token, verify_admin_token
 from app.deps import get_db
 from app.models.analytics_models import AnalyticsEvent
 from app.models.order_models import Order, OrderItem, TrackingEvent
+from app.services.admin_economics import compute_store_economics, sar_per_usd
 
 router = APIRouter()
 
@@ -304,7 +305,6 @@ def admin_metrics(
         )
     )
     rev_int = int(revenue or 0)
-    aov = round(rev_int / orders_count, 2) if orders_count else 0.0
 
     conv = None
     if trusted_views > 0:
@@ -324,6 +324,8 @@ def admin_metrics(
     if orders_count > 0:
         upsell_rate = round(100.0 * float(upsell_orders) / float(orders_count), 3)
 
+    economics = compute_store_economics(db, start_dt=start_dt, end_dt=end_dt)
+
     out: dict[str, Any] = {
         "range": {"start": start_s, "end": end_s, "timezone": "Asia/Riyadh"},
         "trusted_clicks": int(trusted_views),
@@ -331,14 +333,26 @@ def admin_metrics(
         "total_page_views_recorded": int(total_views),
         "orders": int(orders_count),
         "revenue_sar": rev_int,
-        "aov_sar": aov,
+        "subtotal_sar": economics["subtotal_sar"],
+        "upsell_revenue_sar": economics["upsell_revenue_sar"],
+        "aov_sar": economics["aov_sar"],
+        "aov_usd": economics["aov_usd"],
+        "subtotal_aov_sar": economics["subtotal_aov_sar"],
+        "upsell_per_order_sar": economics["upsell_per_order_sar"],
+        "selling_price_per_piece_sar": economics["selling_price_per_piece_sar"],
+        "selling_price_per_piece_usd": economics["selling_price_per_piece_usd"],
+        "avg_main_pieces_per_order": economics["avg_main_pieces_per_order"],
+        "computed_aov_sar": economics["computed_aov_sar"],
         "conversion_rate_percent": conv,
         "upsell_orders": int(upsell_orders),
         "upsell_attach_rate_percent": upsell_rate,
-        "notes": (
-            "conversion_rate_percent = orders / trusted_clicks (page_view events); "
-            "trusted = SA + MaxMind/IPQS analytics rules."
-        ),
+        "sar_per_usd": economics["sar_per_usd"],
+        "catalog_selling_prices_sar": economics["catalog_selling_prices_sar"],
+        "fixed_costs_usd": economics["fixed_costs_usd"],
+        "fixed_costs_sar": economics["fixed_costs_sar"],
+        "notes": economics["notes"]
+        + " conversion_rate_percent = orders / trusted_clicks (page_view events); "
+        "trusted = SA + MaxMind/IPQS analytics rules.",
     }
     if warning is not None:
         out["warning"] = warning
@@ -404,67 +418,32 @@ def _dec(v: Decimal | None) -> float | None:
 
 
 def _sar_per_usd() -> float:
-    """SAR per 1 USD (e.g. 3.75). USD = SAR / rate."""
-
-    raw = os.getenv("SAR_PER_USD", "3.75").strip()
-    try:
-        v = float(raw)
-        return v if v > 0 else 3.75
-    except ValueError:
-        return 3.75
+    return sar_per_usd()
 
 
 @router.get("/admin/data/profit-baseline")
 def admin_profit_baseline(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin_user),
+    start: str = "",
+    end: str = "",
 ) -> dict[str, Any]:
-    """Lifetime store stats for COD profit calculator (AOV + avg pieces per order)."""
+    """Store stats for COD profit calculator — optional date range (Asia/Riyadh)."""
 
-    rate = _sar_per_usd()
-    orders_count = int(db.scalar(select(func.count()).select_from(Order)) or 0)
-    revenue_sar = int(db.scalar(select(func.coalesce(func.sum(Order.total_sar), 0))) or 0)
-    aov_sar = round(revenue_sar / orders_count, 2) if orders_count else 0.0
-    aov_usd = round(aov_sar / rate, 2) if orders_count and rate > 0 else 0.0
+    if start.strip() or end.strip():
+        today = _today_store()
+        start_s = start.strip() or today
+        end_s = end.strip() or today
+        start_dt, end_dt = _parse_day_range(start_s, end_s)
+        economics = compute_store_economics(db, start_dt=start_dt, end_dt=end_dt)
+        economics["range"] = {"start": start_s, "end": end_s, "timezone": "Asia/Riyadh"}
+    else:
+        economics = compute_store_economics(db)
+        economics["range"] = None
 
-    pieces_subq = (
-        select(
-            OrderItem.order_id.label("order_id"),
-            func.sum(OrderItem.offer_qty).label("pieces"),
-        )
-        .group_by(OrderItem.order_id)
-        .subquery()
-    )
-    avg_pieces_raw = db.scalar(select(func.avg(pieces_subq.c.pieces)))
-    avg_pieces = round(float(avg_pieces_raw or 0), 3) if orders_count else 0.0
-    total_pieces = int(
-        db.scalar(select(func.coalesce(func.sum(pieces_subq.c.pieces), 0))) or 0
-    )
-    selling_price_usd = round(aov_usd / avg_pieces, 2) if avg_pieces > 0 and aov_usd > 0 else 0.0
-    selling_price_sar = round(aov_sar / avg_pieces, 2) if avg_pieces > 0 and aov_sar > 0 else 0.0
-
-    return {
-        "orders_count": orders_count,
-        "revenue_sar": revenue_sar,
-        "aov_sar": aov_sar,
-        "aov_usd": aov_usd,
-        "avg_pieces_per_order": avg_pieces,
-        "total_pieces": total_pieces,
-        "selling_price_per_piece_usd": selling_price_usd,
-        "selling_price_per_piece_sar": selling_price_sar,
-        "sar_per_usd": rate,
-        "fixed_costs_usd": {
-            "per_confirmed_lead": 1.7,
-            "per_delivered_order": 4.0,
-            "per_return_order": 1.3,
-            "per_fulfilled_shipment": 0.8,
-        },
-        "notes": (
-            "avg_pieces_per_order = mean sum(offer_qty) per order (all line items). "
-            "Fulfilled fee applied per confirmed order (warehouse ship). "
-            "Return fee on confirmed − delivered."
-        ),
-    }
+    # Back-compat field names for profit calculator JS
+    economics["avg_pieces_per_order"] = economics["avg_main_pieces_per_order"]
+    return economics
 
 
 @router.get("/admin/data/orders/{order_id}")

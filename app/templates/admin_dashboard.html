@@ -379,9 +379,24 @@
           <div class="hint">مجموع total_sar للطلبات.</div>
         </div>
         <div class="kpi">
-          <div class="label">متوسط قيمة الطلب</div>
+          <div class="label">متوسط قيمة الطلب (AOV)</div>
           <div class="value" id="kpi-aov">—</div>
-          <div class="hint">إيرادات ÷ عدد الطلبات.</div>
+          <div class="hint">إجمالي الطلب ÷ العدد — يطابق سعر البيع × القطع + Upsell.</div>
+        </div>
+        <div class="kpi">
+          <div class="label">سعر البيع / قطعة</div>
+          <div class="value" id="kpi-sell">—</div>
+          <div class="hint">مجموع subtotal ÷ قطع المنتج (بدون Upsell).</div>
+        </div>
+        <div class="kpi">
+          <div class="label">متوسط القطع / طلب</div>
+          <div class="value" id="kpi-pieces">—</div>
+          <div class="hint">قطع العرض الأساسي فقط (1 / 2 / 3).</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Upsell / طلب</div>
+          <div class="value" id="kpi-upsell-sar">—</div>
+          <div class="hint">متوسط 99 ر.س × نسبة القبول.</div>
         </div>
         <div class="kpi">
           <div class="label">مرفقات Upsell</div>
@@ -389,6 +404,7 @@
           <div class="hint">نسبة الطلبات التي قبلت العرض الإضافي.</div>
         </div>
       </div>
+      <div class="calc-fees" id="overview-fees-row" aria-label="COD Network KSA fees"></div>
       <footer class="note" id="metrics-note"></footer>
     </div>
 
@@ -450,22 +466,35 @@
       </div>
     </div>
     <div class="panel" id="profit-panel" style="display:none;margin-top:16px;">
-      <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">Profit calculator — COD (USD)</p>
+      <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">Profit calculator — COD Network KSA</p>
       <p style="font-size:.84rem;color:var(--muted);margin:0 0 12px;line-height:1.5;">
         Funnel: <strong>leads</strong> × confirmation → <strong>confirmed</strong> × delivery → <strong>delivered</strong>.
-        Revenue = delivered × AOV. Lifetime AOV (SAR) from orders DB; USD = SAR ÷ FX rate.
+        AOV = (avg main pieces × selling price) + (upsell attach × 99 SAR). Ops fees from COD Network agreement (env <code>COD_FEE_*</code>).
       </p>
+      <div class="filters" style="margin-bottom:12px;">
+        <label class="field">من
+          <input type="date" id="profit-start"/>
+        </label>
+        <label class="field">إلى
+          <input type="date" id="profit-end"/>
+        </label>
+        <button type="button" class="ghost" id="profit-use-overview">نفس نطاق النظرة العامة</button>
+        <button type="button" class="primary" id="profit-reload">تحديث من الطلبات</button>
+      </div>
       <div class="calc-banner" id="profit-baseline-banner">Loading store baseline…</div>
       <div class="calc-fees" id="pc-fees-row" aria-label="Fixed ops fees"></div>
       <div class="calc-block">
-        <h4>Revenue &amp; product (from store AOV)</h4>
-        <p class="hint">Avg pieces/order = mean sum(offer_qty) per order. Selling price/piece = AOV ÷ avg pieces.</p>
+        <h4>Revenue &amp; product (selling price aligned)</h4>
+        <p class="hint">Selling price = weighted subtotal ÷ main pieces. AOV auto-syncs: pieces × sell + upsell % × 99 SAR.</p>
         <div class="calc-grid">
         <label class="field">SAR per 1 USD<input type="number" id="pc-sar-usd" step="0.01" min="0.01" value="3.75"/></label>
-        <label class="field">Lifetime AOV (SAR)<input type="number" id="pc-aov-sar" step="0.01" min="0"/></label>
-        <label class="field">AOV (USD)<input type="number" id="pc-aov-usd" step="0.01" min="0"/></label>
-        <label class="field">Avg pieces / order<input type="number" id="pc-avg-pieces" step="0.01" min="0"/></label>
+        <label class="field">AOV (SAR)<input type="number" id="pc-aov-sar" step="0.01" min="0" readonly style="opacity:.85"/></label>
+        <label class="field">AOV (USD)<input type="number" id="pc-aov-usd" step="0.01" min="0" readonly style="opacity:.85"/></label>
+        <label class="field">Avg main pieces / order<input type="number" id="pc-avg-pieces" step="0.01" min="0"/></label>
         <label class="field">Selling price / piece (USD)<input type="number" id="pc-selling-price" step="0.01" min="0"/></label>
+        <label class="field">Selling price / piece (SAR)<input type="number" id="pc-selling-price-sar" step="0.01" min="0"/></label>
+        <label class="field">Upsell attach (%)<input type="number" id="pc-upsell-pct" step="0.1" min="0" max="100"/></label>
+        <label class="field">Upsell price (SAR)<input type="number" id="pc-upsell-sar" step="1" min="0" value="99" readonly style="opacity:.85"/></label>
         <label class="field">Product cost / piece (USD)<input type="number" id="pc-product-cost" step="0.01" min="0" value="0"/></label>
         </div>
       </div>
@@ -495,8 +524,8 @@
         </div>
       </div>
       <footer class="note" style="margin-top:18px;">
-        COGS = confirmed × avg pieces × product cost. Fulfillment fee per confirmed warehouse shipment.
-        Configure <code>SAR_PER_USD</code> in backend env for FX.
+        COGS = confirmed × avg main pieces × product cost. COD fees: confirmation + delivery + return + warehouse (USD, env <code>COD_FEE_CONFIRMATION_USD</code>, <code>COD_FEE_DELIVERY_USD</code>, <code>COD_FEE_RETURN_USD</code>, <code>COD_FEE_WAREHOUSE_USD</code>).
+        Configure <code>SAR_PER_USD</code> for FX.
       </footer>
     </div>
 
@@ -687,13 +716,37 @@
         cr == null ? '—' : `${fmtDec(cr, 2)} %`;
       document.getElementById('kpi-rev').textContent = fmtNum(j.revenue_sar);
       document.getElementById('kpi-aov').textContent =
-        j.orders ? fmtDec(j.aov_sar, 2) : '—';
+        j.orders ? fmtDec(j.aov_sar, 2) + ' ر.س' : '—';
+      const sellEl = document.getElementById('kpi-sell');
+      if (sellEl) {
+        sellEl.textContent = j.selling_price_per_piece_sar
+          ? fmtDec(j.selling_price_per_piece_sar, 2) + ' ر.س'
+          : '—';
+      }
+      const piecesEl = document.getElementById('kpi-pieces');
+      if (piecesEl) {
+        piecesEl.textContent = j.avg_main_pieces_per_order
+          ? fmtDec(j.avg_main_pieces_per_order, 2)
+          : '—';
+      }
+      const upsellSarEl = document.getElementById('kpi-upsell-sar');
+      if (upsellSarEl) {
+        upsellSarEl.textContent = j.orders
+          ? fmtDec(j.upsell_per_order_sar, 2) + ' ر.س'
+          : '—';
+      }
       const ur = j.upsell_attach_rate_percent;
       document.getElementById('kpi-upsell').textContent =
         ur == null ? '—' : `${fmtDec(ur, 2)} %`;
+      if (j.fixed_costs_usd && j.fixed_costs_sar) {
+        pcApplyFees(j.fixed_costs_usd, j.fixed_costs_sar, 'overview-fees-row');
+      }
       let note =
         `مسجّل صفحات: ${fmtNum(j.total_page_views_recorded)} · `
         + `IPs موثوقة مميزة: ${fmtNum(j.trusted_unique_ips)} · `
+        + (j.computed_aov_sar != null && j.orders
+          ? `AOV محسوب: ${fmtDec(j.computed_aov_sar, 2)} ر.س · `
+          : '')
         + j.notes;
       if (j.warning) note += ' · تنبيه: ' + j.warning;
       document.getElementById('metrics-note').textContent = note;
@@ -735,8 +788,10 @@
       const rows = [
         ['العميل', o.customer_name],
         ['الجوال', `${o.phone_local} (${o.phone_e164})`],
-        ['المجموع', `${fmtNum(o.total_sar)} ر.س (شامل Upsell ${fmtNum(o.upsell_total_sar)})`],
-        ['Upsell', o.accepted_upsell ? `نعم — ${o.upsell_product_id || ''}` : 'لا'],
+        ['Subtotal', `${fmtNum(o.subtotal_sar)} ر.س`],
+        ['Upsell', `${fmtNum(o.upsell_total_sar)} ر.س`],
+        ['المجموع', `${fmtNum(o.total_sar)} ر.س`],
+        ['Upsell accepted', o.accepted_upsell ? `نعم — ${o.upsell_product_id || ''}` : 'لا'],
         ['مصدر الصفحة', o.source_page || '—'],
         ['purchase_event_id', o.purchase_event_id || '—'],
         ['lead_event_id', o.client_event_id || '—'],
@@ -817,11 +872,12 @@
     }
 
     let PC_FEES = { CONFIRMED: 1.7, DELIVERED: 4, RETURN: 1.3, FULFILL: 0.8 };
+    let PC_FEES_SAR = { CONFIRMED: 6.38, DELIVERED: 15, RETURN: 4.88, FULFILL: 3 };
     let profitBaseline = null;
     let pcSyncLock = false;
 
-    function pcApplyFees(fixed) {
-      const f = fixed || {
+    function pcApplyFees(fixedUsd, fixedSar, rowId) {
+      const f = fixedUsd || {
         per_confirmed_lead: 1.7,
         per_delivered_order: 4,
         per_return_order: 1.3,
@@ -833,15 +889,29 @@
         RETURN: f.per_return_order ?? 1.3,
         FULFILL: f.per_fulfilled_shipment ?? 0.8,
       };
-      const row = document.getElementById('pc-fees-row');
+      const rate = pcNum('pc-sar-usd') || 3.75;
+      const sar = fixedSar || {
+        per_confirmed_lead: PC_FEES.CONFIRMED * rate,
+        per_delivered_order: PC_FEES.DELIVERED * rate,
+        per_return_order: PC_FEES.RETURN * rate,
+        per_fulfilled_shipment: PC_FEES.FULFILL * rate,
+      };
+      PC_FEES_SAR = {
+        CONFIRMED: sar.per_confirmed_lead ?? PC_FEES.CONFIRMED * rate,
+        DELIVERED: sar.per_delivered_order ?? PC_FEES.DELIVERED * rate,
+        RETURN: sar.per_return_order ?? PC_FEES.RETURN * rate,
+        FULFILL: sar.per_fulfilled_shipment ?? PC_FEES.FULFILL * rate,
+      };
+      const row = document.getElementById(rowId || 'pc-fees-row');
       if (!row) return;
-      const feeUsd = (n) => '$' + Number(n).toFixed(2);
+      const feeLabel = (usd, sarVal, label) =>
+        `<span>${label}: <b>$${Number(usd).toFixed(2)}</b> · ${fmtDec(sarVal, 2)} ر.س</span>`;
       row.innerHTML = [
-        ['Confirmed lead', PC_FEES.CONFIRMED],
-        ['Delivered order', PC_FEES.DELIVERED],
-        ['Return', PC_FEES.RETURN],
-        ['Warehouse fulfill', PC_FEES.FULFILL],
-      ].map(([label, amt]) => `<span>${label}: <b>${feeUsd(amt)}</b></span>`).join('');
+        ['Confirmation (call center)', PC_FEES.CONFIRMED, PC_FEES_SAR.CONFIRMED],
+        ['Delivery KSA', PC_FEES.DELIVERED, PC_FEES_SAR.DELIVERED],
+        ['Return', PC_FEES.RETURN, PC_FEES_SAR.RETURN],
+        ['Warehouse / fulfill', PC_FEES.FULFILL, PC_FEES_SAR.FULFILL],
+      ].map(([label, u, s]) => feeLabel(u, s, label)).join('');
     }
 
     function showAdminTab(name) {
@@ -862,53 +932,84 @@
       return Number.isFinite(v) ? v : 0;
     }
 
-    function pcSellingFromAov(aovUsd, avgPieces) {
-      return avgPieces > 0 && aovUsd > 0 ? aovUsd / avgPieces : 0;
+    function pcSellingFromSubtotal(sellSar, rate) {
+      return rate > 0 && sellSar > 0 ? sellSar / rate : 0;
+    }
+
+    function pcUpsellRate() {
+      return Math.min(1, Math.max(0, pcNum('pc-upsell-pct') / 100));
+    }
+
+    function pcUpsellUsd() {
+      const rate = pcNum('pc-sar-usd');
+      const upsellSar = pcNum('pc-upsell-sar') || 99;
+      return rate > 0 ? upsellSar / rate : 0;
+    }
+
+    function pcOrderValueUsd() {
+      const avg = pcNum('pc-avg-pieces');
+      const selling = pcNum('pc-selling-price');
+      const upsellUsd = pcUpsellUsd();
+      const upsellRate = pcUpsellRate();
+      if (selling > 0 && avg > 0) {
+        return avg * selling + upsellRate * upsellUsd;
+      }
+      return pcNum('pc-aov-usd');
+    }
+
+    function pcOrderValueSar() {
+      const rate = pcNum('pc-sar-usd');
+      return rate > 0 ? pcOrderValueUsd() * rate : 0;
+    }
+
+    function syncAovFromEconomics() {
+      if (pcSyncLock) return;
+      pcSyncLock = true;
+      const aovUsd = pcOrderValueUsd();
+      const aovSar = pcOrderValueSar();
+      document.getElementById('pc-aov-usd').value = aovUsd > 0 ? aovUsd.toFixed(2) : '';
+      document.getElementById('pc-aov-sar').value = aovSar > 0 ? aovSar.toFixed(2) : '';
+      pcSyncLock = false;
+    }
+
+    function syncSellingFromSar() {
+      if (pcSyncLock) return;
+      const rate = pcNum('pc-sar-usd');
+      const sellSar = pcNum('pc-selling-price-sar');
+      if (rate > 0 && sellSar > 0) {
+        pcSyncLock = true;
+        document.getElementById('pc-selling-price').value = (sellSar / rate).toFixed(2);
+        syncAovFromEconomics();
+        pcSyncLock = false;
+      }
+    }
+
+    function syncSellingSarFromUsd() {
+      if (pcSyncLock) return;
+      const rate = pcNum('pc-sar-usd');
+      const sellUsd = pcNum('pc-selling-price');
+      if (rate > 0 && sellUsd > 0) {
+        pcSyncLock = true;
+        document.getElementById('pc-selling-price-sar').value = (sellUsd * rate).toFixed(2);
+        syncAovFromEconomics();
+        pcSyncLock = false;
+      }
     }
 
     function syncSellingFromAov() {
-      const el = document.getElementById('pc-selling-price');
-      const v = pcSellingFromAov(pcNum('pc-aov-usd'), pcNum('pc-avg-pieces'));
-      el.value = v > 0 ? v.toFixed(2) : '';
+      syncSellingSarFromUsd();
     }
 
     function syncAovFromSelling() {
-      if (pcSyncLock) return;
-      const selling = pcNum('pc-selling-price');
-      const avg = pcNum('pc-avg-pieces');
-      if (selling > 0 && avg > 0) {
-        pcSyncLock = true;
-        const aovUsd = selling * avg;
-        document.getElementById('pc-aov-usd').value = aovUsd.toFixed(2);
-        const rate = pcNum('pc-sar-usd');
-        if (rate > 0) {
-          document.getElementById('pc-aov-sar').value = (aovUsd * rate).toFixed(2);
-        }
-        pcSyncLock = false;
-      }
+      syncAovFromEconomics();
     }
 
     function syncAovUsdFromSar() {
-      if (pcSyncLock) return;
-      const rate = pcNum('pc-sar-usd');
-      const sar = pcNum('pc-aov-sar');
-      if (rate > 0 && sar > 0) {
-        pcSyncLock = true;
-        document.getElementById('pc-aov-usd').value = (sar / rate).toFixed(2);
-        syncSellingFromAov();
-        pcSyncLock = false;
-      }
+      syncAovFromEconomics();
     }
 
     function syncAovSarFromUsd() {
-      if (pcSyncLock) return;
-      const rate = pcNum('pc-sar-usd');
-      const usdVal = pcNum('pc-aov-usd');
-      if (rate > 0 && usdVal > 0) {
-        pcSyncLock = true;
-        document.getElementById('pc-aov-sar').value = (usdVal * rate).toFixed(2);
-        pcSyncLock = false;
-      }
+      syncAovFromEconomics();
     }
 
     function runAll() {
@@ -918,19 +1019,23 @@
 
     function pcInputs(leads) {
       const avgPieces = pcNum('pc-avg-pieces');
-      const aovUsd = pcNum('pc-aov-usd');
       let sellingPrice = pcNum('pc-selling-price');
-      if (sellingPrice <= 0 && avgPieces > 0 && aovUsd > 0) {
-        sellingPrice = aovUsd / avgPieces;
+      const rate = pcNum('pc-sar-usd');
+      const sellSar = pcNum('pc-selling-price-sar');
+      if (sellingPrice <= 0 && sellSar > 0 && rate > 0) {
+        sellingPrice = sellSar / rate;
       }
+      const orderValueUsd = pcOrderValueUsd();
       return {
         leads,
         cpl: pcNum('pc-cpl'),
         rConf: Math.min(1, Math.max(0, pcNum('pc-conf-pct') / 100)),
         rDel: Math.min(1, Math.max(0, pcNum('pc-del-pct') / 100)),
-        aovUsd,
+        aovUsd: orderValueUsd,
         avgPieces,
         sellingPrice,
+        upsellRate: pcUpsellRate(),
+        upsellUsd: pcUpsellUsd(),
         productCost: pcNum('pc-product-cost'),
       };
     }
@@ -985,29 +1090,39 @@
 
     async function loadProfitBaseline() {
       const banner = document.getElementById('profit-baseline-banner');
+      const start = document.getElementById('profit-start')?.value || '';
+      const end = document.getElementById('profit-end')?.value || '';
+      const qs = start && end
+        ? `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+        : '';
       try {
-        const r = await api('/api/admin/data/profit-baseline');
+        const r = await api('/api/admin/data/profit-baseline' + qs);
         const j = await r.json();
         if (!r.ok) throw new Error(j.detail ? String(j.detail) : 'HTTP ' + r.status);
         profitBaseline = j;
-        pcApplyFees(j.fixed_costs_usd);
+        pcApplyFees(j.fixed_costs_usd, j.fixed_costs_sar, 'pc-fees-row');
         document.getElementById('pc-sar-usd').value = j.sar_per_usd;
-        document.getElementById('pc-aov-sar').value = j.aov_sar > 0 ? j.aov_sar : '';
-        document.getElementById('pc-aov-usd').value = j.aov_usd;
-        document.getElementById('pc-avg-pieces').value = j.avg_pieces_per_order;
-        const sellUsd = j.selling_price_per_piece_usd ?? pcSellingFromAov(j.aov_usd, j.avg_pieces_per_order);
-        const sellSar = j.selling_price_per_piece_sar ?? (j.avg_pieces_per_order > 0 ? j.aov_sar / j.avg_pieces_per_order : 0);
+        document.getElementById('pc-avg-pieces').value = j.avg_main_pieces_per_order ?? j.avg_pieces_per_order;
+        document.getElementById('pc-upsell-pct').value = j.upsell_attach_rate_percent ?? 0;
+        document.getElementById('pc-upsell-sar').value = j.upsell_price_sar ?? 99;
+        const sellUsd = j.selling_price_per_piece_usd ?? 0;
+        const sellSar = j.selling_price_per_piece_sar ?? 0;
         document.getElementById('pc-selling-price').value = sellUsd > 0 ? sellUsd.toFixed(2) : '';
+        document.getElementById('pc-selling-price-sar').value = sellSar > 0 ? sellSar.toFixed(2) : '';
+        syncAovFromEconomics();
+        const rangeTxt = j.range
+          ? `${j.range.start} → ${j.range.end}`
+          : 'كل الطلبات';
         banner.innerHTML =
-          `<strong>Lifetime store data:</strong> ${fmtNum(j.orders_count)} orders · `
-          + `revenue ${fmtNum(j.revenue_sar)} SAR · AOV ${fmtDec(j.aov_sar, 2)} SAR → ${fmtDec(j.aov_usd, 2)} USD @ ${fmtDec(j.sar_per_usd, 2)} SAR/USD · `
-          + `avg <bdi>${fmtDec(j.avg_pieces_per_order, 2)}</bdi> pcs/order`
-          + (j.total_pieces != null ? ` (${fmtNum(j.total_pieces)} pcs total) · ` : ' · ')
-          + `sell ${fmtDec(sellSar, 2)} SAR/pc (${fmtDec(sellUsd, 2)} USD)`;
+          `<strong>Store data (${rangeTxt}):</strong> ${fmtNum(j.orders_count)} orders · `
+          + `revenue ${fmtNum(j.revenue_sar)} SAR · AOV ${fmtDec(j.aov_sar, 2)} SAR (${fmtDec(j.aov_usd, 2)} USD) · `
+          + `sell ${fmtDec(sellSar, 2)} SAR/pc · avg ${fmtDec(j.avg_main_pieces_per_order, 2)} main pcs · `
+          + `upsell ${fmtDec(j.upsell_attach_rate_percent, 1)}% · `
+          + `computed AOV ${fmtDec(j.computed_aov_sar, 2)} SAR`;
         runAll();
       } catch (e) {
         banner.textContent = 'Could not load baseline: ' + e.message;
-        pcApplyFees(null);
+        pcApplyFees(null, null, 'pc-fees-row');
       }
     }
 
@@ -1023,9 +1138,11 @@
           : `<span class="calc-status bad">Below breakeven — lower CPL or improve rates/AOV (gap ${usd(-margin)})</span>`;
       }
       renderCalcOut(document.getElementById('pc-breakeven-out'), [
-        ['AOV (USD)', usd(pcNum('pc-aov-usd')), ''],
-        ['Avg pieces / order', fmtDec(pcNum('pc-avg-pieces'), 2), ''],
+        ['Order value (USD)', usd(pcOrderValueUsd()), ''],
+        ['Order value (SAR)', `${fmtDec(pcOrderValueSar(), 2)} SAR`, ''],
+        ['Avg main pieces / order', fmtDec(pcNum('pc-avg-pieces'), 2), ''],
         ['Selling price / piece', usd(r.sellingPrice), ''],
+        ['Upsell attach', `${fmtDec(pcUpsellRate() * 100, 1)} %`, ''],
         ['Product cost / piece', usd(pcNum('pc-product-cost')), ''],
         ['Gross margin / piece', usd(r.marginPerPiece), r.marginPerPiece >= 0 ? 'pos' : 'neg'],
         ['Gross margin %', `${fmtDec(r.grossMarginPct, 1)} %`, r.grossMarginPct >= 0 ? 'pos' : 'neg'],
@@ -1073,7 +1190,11 @@
     });
     document.getElementById('tab-profit').addEventListener('click', () => {
       showAdminTab('profit');
-      if (!profitBaseline) void loadProfitBaseline();
+      const ps = document.getElementById('profit-start');
+      const pe = document.getElementById('profit-end');
+      if (ps && !ps.value) ps.value = document.getElementById('start-date').value;
+      if (pe && !pe.value) pe.value = document.getElementById('end-date').value;
+      void loadProfitBaseline();
     });
     document.getElementById('tab-capi').addEventListener('click', () => {
       showAdminTab('capi');
@@ -1081,41 +1202,37 @@
     });
     document.getElementById('pc-run-breakeven').addEventListener('click', runBreakeven);
     document.getElementById('pc-run-scale').addEventListener('click', runScale);
+    document.getElementById('profit-reload').addEventListener('click', () => void loadProfitBaseline());
+    document.getElementById('profit-use-overview').addEventListener('click', () => {
+      document.getElementById('profit-start').value = document.getElementById('start-date').value;
+      document.getElementById('profit-end').value = document.getElementById('end-date').value;
+      void loadProfitBaseline();
+    });
     document.getElementById('pc-sar-usd').addEventListener('input', () => {
-      const sarEl = document.getElementById('pc-aov-sar');
-      if (sarEl && pcNum('pc-aov-sar') > 0) {
-        syncAovUsdFromSar();
-      } else if (profitBaseline && profitBaseline.aov_sar > 0) {
-        const rate = pcNum('pc-sar-usd');
-        if (rate > 0) {
-          sarEl.value = profitBaseline.aov_sar;
-          document.getElementById('pc-aov-usd').value = (profitBaseline.aov_sar / rate).toFixed(2);
-          syncSellingFromAov();
-        }
-      }
-      runAll();
-    });
-    document.getElementById('pc-aov-sar').addEventListener('input', () => {
-      syncAovUsdFromSar();
-      runAll();
-    });
-    document.getElementById('pc-aov-usd').addEventListener('input', () => {
-      syncAovSarFromUsd();
-      syncSellingFromAov();
+      pcApplyFees(profitBaseline?.fixed_costs_usd, null, 'pc-fees-row');
+      syncSellingSarFromUsd();
       runAll();
     });
     document.getElementById('pc-avg-pieces').addEventListener('input', () => {
-      syncSellingFromAov();
+      syncAovFromEconomics();
       runAll();
     });
     document.getElementById('pc-selling-price').addEventListener('input', () => {
-      syncAovFromSelling();
+      syncSellingSarFromUsd();
+      runAll();
+    });
+    document.getElementById('pc-selling-price-sar').addEventListener('input', () => {
+      syncSellingFromSar();
+      runAll();
+    });
+    document.getElementById('pc-upsell-pct').addEventListener('input', () => {
+      syncAovFromEconomics();
       runAll();
     });
     ['pc-product-cost','pc-cpl','pc-conf-pct','pc-del-pct','pc-leads'].forEach((id) => {
       document.getElementById(id).addEventListener('input', runAll);
     });
-    pcApplyFees();
+    pcApplyFees(null, null, 'pc-fees-row');
 
     document.getElementById('apply-range').addEventListener('click', loadMetrics);
 
@@ -1149,6 +1266,10 @@
       document.getElementById('end-date').value = t;
       document.getElementById('orders-start').value = monthAgo;
       document.getElementById('orders-end').value = t;
+      const ps = document.getElementById('profit-start');
+      const pe = document.getElementById('profit-end');
+      if (ps) ps.value = weekAgo;
+      if (pe) pe.value = t;
       loadMetrics();
       void loadLatestOrders();
     })();
