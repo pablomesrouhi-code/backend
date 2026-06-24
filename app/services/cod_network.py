@@ -128,6 +128,30 @@ def rebuild_cod_network_payload_from_persisted_order(order: Order) -> dict[str, 
     )
 
 
+def resend_persisted_order_to_cod_network(
+    order: Order,
+) -> tuple[Literal["ok", "skipped", "failed"], str | None, int | None]:
+    payload = rebuild_cod_network_payload_from_persisted_order(order)
+    return send_cod_network_lead(payload)
+
+
+def mark_order_cod_delivery(
+    order: Order,
+    outcome: Literal["ok", "skipped", "failed"],
+    err: str | None,
+    lead_id: int | None,
+) -> None:
+    if outcome == "ok":
+        order.cod_network_sent_at = datetime.now(UTC)
+        order.cod_network_error = None
+        if lead_id is not None:
+            order.cod_network_lead_id = lead_id
+    elif outcome == "failed":
+        order.cod_network_error = (err or "unknown")[:4000]
+    elif outcome == "skipped":
+        order.cod_network_error = (err or "cod_skipped")[:4000]
+
+
 def _retries() -> int:
     raw = (os.getenv("COD_NETWORK_RETRIES") or "3").strip()
     try:

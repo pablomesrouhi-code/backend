@@ -14,14 +14,16 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy import func, inspect, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, inspect, or_, select
+from sqlalchemy.orm import Session, selectinload
 
 from app.admin_session import mint_admin_token, verify_admin_token
 from app.deps import get_db
 from app.models.analytics_models import AnalyticsEvent
 from app.models.order_models import Order, OrderItem, TrackingEvent
 from app.services.admin_economics import compute_store_economics, sar_per_usd
+from app.services.cod_network import mark_order_cod_delivery, resend_persisted_order_to_cod_network
+from app.services.sheet_webhook import mark_order_sheet_delivery, resend_persisted_order_to_sheet
 
 router = APIRouter()
 
@@ -569,3 +571,162 @@ def admin_capi_events(
         for row in rows
     ]
     return {"events": events, "total": total, "limit": lim, "offset": off}
+
+
+def _admin_load_order(db: Session, order_id: str) -> Order:
+    try:
+        oid = uuid.UUID(order_id.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid order id") from e
+    order = db.scalar(
+        select(Order).where(Order.id == oid).options(selectinload(Order.items))
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+
+@router.post("/admin/data/orders/{order_id}/resend-sheet")
+def admin_resend_order_sheet(
+    order_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    """Replay one Postgres order row to Google Sheet (admin UI)."""
+
+    order = _admin_load_order(db, order_id)
+    try:
+        outcome, sheet_err = resend_persisted_order_to_sheet(order)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    mark_order_sheet_delivery(order, outcome, sheet_err)
+    try:
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Failed to persist sheet status") from e
+    return {
+        "ok": outcome == "ok",
+        "outcome": outcome,
+        "detail": sheet_err,
+        "order_number": order.order_number,
+        "order_id": str(order.id),
+    }
+
+
+@router.post("/admin/data/orders/{order_id}/resend-cod")
+def admin_resend_order_cod(
+    order_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    """Replay one order to COD Network leads API."""
+
+    order = _admin_load_order(db, order_id)
+    try:
+        outcome, err, lead_id = resend_persisted_order_to_cod_network(order)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    mark_order_cod_delivery(order, outcome, err, lead_id)
+    try:
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Failed to persist COD status") from e
+    return {
+        "ok": outcome == "ok",
+        "outcome": outcome,
+        "detail": err,
+        "lead_id": lead_id,
+        "order_number": order.order_number,
+        "order_id": str(order.id),
+    }
+
+
+class BulkResendBody(BaseModel):
+    resend_cod: bool = False
+
+
+@router.post("/admin/data/orders/resend-failed-sheets")
+def admin_resend_failed_sheets(
+    body: BulkResendBody,
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    """Resend Sheet rows for orders not successfully delivered in the date range."""
+
+    today = _today_store()
+    start_s = start.strip() or today
+    end_s = end.strip() or today
+    start_dt, end_dt = _parse_day_range(start_s, end_s)
+
+    orders = db.scalars(
+        select(Order)
+        .where(
+            Order.created_at >= start_dt,
+            Order.created_at < end_dt,
+            or_(Order.sheet_sent_at.is_(None), Order.sheet_error.isnot(None)),
+        )
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.asc())
+    ).all()
+
+    sheet_ok = 0
+    sheet_failed = 0
+    cod_ok = 0
+    cod_failed = 0
+    results: list[dict[str, Any]] = []
+
+    for order in orders:
+        row: dict[str, Any] = {"order_number": order.order_number, "order_id": str(order.id)}
+        try:
+            outcome, sheet_err = resend_persisted_order_to_sheet(order)
+            mark_order_sheet_delivery(order, outcome, sheet_err)
+            row["sheet_outcome"] = outcome
+            row["sheet_detail"] = sheet_err
+            if outcome == "ok":
+                sheet_ok += 1
+            else:
+                sheet_failed += 1
+        except ValueError as e:
+            row["sheet_outcome"] = "failed"
+            row["sheet_detail"] = str(e)
+            sheet_failed += 1
+
+        if body.resend_cod:
+            try:
+                cod_out, cod_err, lead_id = resend_persisted_order_to_cod_network(order)
+                mark_order_cod_delivery(order, cod_out, cod_err, lead_id)
+                row["cod_outcome"] = cod_out
+                row["cod_detail"] = cod_err
+                row["cod_lead_id"] = lead_id
+                if cod_out == "ok":
+                    cod_ok += 1
+                else:
+                    cod_failed += 1
+            except ValueError as e:
+                row["cod_outcome"] = "failed"
+                row["cod_detail"] = str(e)
+                cod_failed += 1
+
+        results.append(row)
+
+    try:
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Failed to persist bulk resend results") from e
+
+    return {
+        "ok": sheet_failed == 0 and (not body.resend_cod or cod_failed == 0),
+        "start": start_s,
+        "end": end_s,
+        "total": len(orders),
+        "sheet_ok": sheet_ok,
+        "sheet_failed": sheet_failed,
+        "cod_ok": cod_ok if body.resend_cod else None,
+        "cod_failed": cod_failed if body.resend_cod else None,
+        "results": results,
+    }

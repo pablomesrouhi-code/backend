@@ -105,6 +105,27 @@ def rebuild_sheet_payload_from_persisted_order(order: Order) -> dict[str, str | 
     )
 
 
+def resend_persisted_order_to_sheet(order: Order) -> tuple[Literal["ok", "skipped", "failed"], str | None]:
+    """Rebuild row from DB and POST to Apps Script (admin / diagnostics replay)."""
+
+    payload = rebuild_sheet_payload_from_persisted_order(order)
+    return send_google_sheet_webhook(payload)
+
+
+def mark_order_sheet_delivery(
+    order: Order,
+    outcome: Literal["ok", "skipped", "failed"],
+    sheet_err: str | None,
+) -> None:
+    if outcome == "ok":
+        order.sheet_sent_at = datetime.now(UTC)
+        order.sheet_error = None
+    elif outcome == "failed":
+        order.sheet_error = (sheet_err or "unknown")[:4000]
+    elif outcome == "skipped":
+        order.sheet_error = (sheet_err or "sheet_skipped")[:4000]
+
+
 def _sheet_retries() -> int:
     raw = os.getenv("GOOGLE_SHEET_WEBHOOK_RETRIES", "5").strip()
     try:

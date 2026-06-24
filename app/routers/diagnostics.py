@@ -17,13 +17,13 @@ from sqlalchemy.orm import selectinload
 from app.database import SessionLocal, get_engine
 from app.models.order_models import Order
 from app.services.cod_network import (
-    rebuild_cod_network_payload_from_persisted_order,
-    send_cod_network_lead,
+    mark_order_cod_delivery,
+    resend_persisted_order_to_cod_network,
 )
 from app.services.sheet_webhook import (
     _webhook_url_from_env,
-    rebuild_sheet_payload_from_persisted_order,
-    send_google_sheet_webhook,
+    mark_order_sheet_delivery,
+    resend_persisted_order_to_sheet,
 )
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
@@ -108,16 +108,8 @@ def resend_sheet_row_manual(
         if order is None:
             raise HTTPException(status_code=404, detail="order not found")
 
-        payload = rebuild_sheet_payload_from_persisted_order(order)
-        outcome, sheet_err = send_google_sheet_webhook(payload)
-
-        if outcome == "ok":
-            order.sheet_sent_at = datetime.now(UTC)
-            order.sheet_error = None
-        elif outcome == "failed":
-            order.sheet_error = (sheet_err or "unknown")[:4000]
-        else:
-            order.sheet_error = (sheet_err or "no_webhook_url")[:4000]
+        outcome, sheet_err = resend_persisted_order_to_sheet(order)
+        mark_order_sheet_delivery(order, outcome, sheet_err)
 
         try:
             db.commit()
@@ -168,18 +160,8 @@ def resend_cod_network_lead_manual(
         if order is None:
             raise HTTPException(status_code=404, detail="order not found")
 
-        payload = rebuild_cod_network_payload_from_persisted_order(order)
-        outcome, err, lead_id = send_cod_network_lead(payload)
-
-        if outcome == "ok":
-            order.cod_network_sent_at = datetime.now(UTC)
-            order.cod_network_error = None
-            if lead_id is not None:
-                order.cod_network_lead_id = lead_id
-        elif outcome == "failed":
-            order.cod_network_error = (err or "unknown")[:4000]
-        else:
-            order.cod_network_error = (err or "cod_skipped")[:4000]
+        outcome, err, lead_id = resend_persisted_order_to_cod_network(order)
+        mark_order_cod_delivery(order, outcome, err, lead_id)
 
         try:
             db.commit()

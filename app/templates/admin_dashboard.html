@@ -439,6 +439,7 @@
           <input type="date" id="orders-end"/>
         </label>
         <button type="button" class="primary" id="orders-refresh">تحديث القائمة</button>
+        <button type="button" class="ghost" id="orders-resend-failed" title="إعادة إرسال الطلبات التي لم تصل للشيت">↻ إعادة الشيت الفاشلة</button>
       </div>
       <div class="table-wrap">
         <table class="data">
@@ -560,7 +561,11 @@
           <h3 id="m-title">تفاصيل الطلب</h3>
           <div style="font-size:.82rem;color:var(--muted);" id="m-sub"></div>
         </div>
-        <button type="button" class="ghost" id="m-close">إغلاق</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="ghost" id="m-resend-sheet">↻ إرسال للشيت</button>
+          <button type="button" class="ghost" id="m-resend-cod">↻ إرسال COD</button>
+          <button type="button" class="ghost" id="m-close">إغلاق</button>
+        </div>
       </div>
       <div class="mini-grid" id="m-kv"></div>
       <div class="table-wrap">
@@ -752,6 +757,34 @@
 
     let off = 0;
     const lim = 40;
+    let currentOrderId = null;
+
+    async function resendOrderSheet(orderId) {
+      const r = await api(`/api/admin/data/orders/${encodeURIComponent(orderId)}/resend-sheet`, { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+      return j;
+    }
+
+    async function resendOrderCod(orderId) {
+      const r = await api(`/api/admin/data/orders/${encodeURIComponent(orderId)}/resend-cod`, { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+      return j;
+    }
+
+    async function resendFailedSheetsInRange() {
+      const s = document.getElementById('orders-start').value;
+      const e = document.getElementById('orders-end').value;
+      const alsoCod = window.confirm('إعادة إرسال الطلبات التي لم تصل للشيت في هذا النطاق.\n\nهل تريد أيضاً إعادة COD Network؟');
+      const r = await api(
+        `/api/admin/data/orders/resend-failed-sheets?start=${encodeURIComponent(s)}&end=${encodeURIComponent(e)}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resend_cod: alsoCod }) },
+      );
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+      return j;
+    }
 
     async function loadOrders() {
       const s = document.getElementById('orders-start').value;
@@ -775,6 +808,7 @@
     }
 
     async function openOrder(id) {
+      currentOrderId = id;
       const r = await api(`/api/admin/data/orders/${encodeURIComponent(id)}`);
       const j = await r.json();
       const o = j.order;
@@ -1232,6 +1266,50 @@
     document.getElementById('apply-range').addEventListener('click', loadMetrics);
 
     document.getElementById('orders-refresh').addEventListener('click', () => { off = 0; loadOrders(); });
+    document.getElementById('orders-resend-failed').addEventListener('click', async () => {
+      const btn = document.getElementById('orders-resend-failed');
+      btn.disabled = true;
+      try {
+        const j = await resendFailedSheetsInRange();
+        alert(`تم: ${j.sheet_ok} نجح · ${j.sheet_failed} فشل · من ${j.total} طلب`);
+        off = 0;
+        await loadOrders();
+      } catch (err) {
+        alert(`تعذّر الإرسال: ${err.message || err}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    document.getElementById('m-resend-sheet').addEventListener('click', async () => {
+      if (!currentOrderId) return;
+      const btn = document.getElementById('m-resend-sheet');
+      btn.disabled = true;
+      try {
+        const j = await resendOrderSheet(currentOrderId);
+        alert(j.ok ? `تم إرسال ${j.order_number} للشيت` : `فشل: ${j.detail || j.outcome}`);
+        await openOrder(currentOrderId);
+        loadOrders();
+      } catch (err) {
+        alert(`تعذّر الإرسال: ${err.message || err}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    document.getElementById('m-resend-cod').addEventListener('click', async () => {
+      if (!currentOrderId) return;
+      const btn = document.getElementById('m-resend-cod');
+      btn.disabled = true;
+      try {
+        const j = await resendOrderCod(currentOrderId);
+        alert(j.ok ? `تم إرسال ${j.order_number} لـ COD` : `فشل: ${j.detail || j.outcome}`);
+        await openOrder(currentOrderId);
+        loadOrders();
+      } catch (err) {
+        alert(`تعذّر الإرسال: ${err.message || err}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
     document.getElementById('orders-prev').addEventListener('click', () => {
       off = Math.max(0, off - lim);
       loadOrders();
