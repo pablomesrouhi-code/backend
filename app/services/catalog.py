@@ -15,6 +15,18 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
         "ليل ماج - علكات المغنيسيوم و L-Theanine",
         "LaylMag Magnesium Gummies",
     ),
+    "quwwat-sha3r": (
+        "قوة شعر - مسحوق كولاجين بحري للشعر",
+        "Quwwat Sha3r Marine Collagen Hair Powder",
+    ),
+    "wudouh": (
+        "وضوح - مسحوق غلوتاثيون وكولاجين للبشرة",
+        "Wudouh Clear Skin Glow Powder",
+    ),
+    "shahr-hadi": (
+        "شهر هادئ - مسحوق دعم الدورة والتوازن الهرموني",
+        "Shahr Hadi PMS Calm Support Powder",
+    ),
 }
 
 # Seller SKU per product — used in Google Sheet webhook and COD Network leads.
@@ -22,6 +34,9 @@ PRODUCT_SKUS: dict[str, str] = {
     "rawnaq-c": "RWCFH",
     "khiffabiotic": "PRBTCS",
     "laylmag": "MGAGFD",
+    "quwwat-sha3r": "SRHRPW",
+    "wudouh": "PSPFH",
+    "shahr-hadi": "CLCYPWFH",
 }
 
 
