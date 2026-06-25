@@ -31,3 +31,10 @@ class CreateOrderResponse(BaseModel):
     subtotal_sar: int
     upsell_total_sar: int
     total_sar: int
+
+
+class EnsureSheetDeliveryIn(BaseModel):
+    """Thank-you backup: requires ``lead_event_id`` matching saved ``client_event_id``."""
+
+    order_id: str = Field(min_length=8, max_length=64)
+    lead_event_id: str = Field(min_length=8, max_length=128)

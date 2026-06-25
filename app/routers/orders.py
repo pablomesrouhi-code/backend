@@ -8,12 +8,17 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import select
 
 from app.deps import get_db
 from app.log_safe import mask_phone_sa
 from app.models.order_models import Order, OrderItem
-from app.schemas.order_create import CreateOrderRequest, CreateOrderResponse
+from app.schemas.order_create import (
+    CreateOrderRequest,
+    CreateOrderResponse,
+    EnsureSheetDeliveryIn,
+)
 from app.services.catalog import resolve_product
 from app.services.cod_network import (
     apply_cod_network_delivery_to_order,
@@ -22,7 +27,12 @@ from app.services.cod_network import (
 )
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
-from app.services.sheet_webhook import apply_sheet_delivery_to_order, build_sheet_row
+from app.services.sheet_webhook import (
+    apply_sheet_delivery_to_order,
+    build_sheet_row,
+    mark_order_sheet_delivery,
+    resend_persisted_order_to_sheet,
+)
 from app.services.telegram_notify import notify_new_order
 from app.request_ip import client_ip
 from app.services.maxmind_fraud import evaluate_order_fraud
@@ -36,6 +46,16 @@ from app.services.pricing import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _order_matches_lead_token(order: Order, lead_event_id: str) -> bool:
+    token = lead_event_id.strip()
+    if not token:
+        return False
+    for candidate in (order.client_event_id, order.purchase_event_id):
+        if candidate and candidate.strip() == token:
+            return True
+    return False
 
 
 async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str | int | float]) -> None:
@@ -376,3 +396,64 @@ def create_order(
         upsell_total_sar=upsell_total,
         total_sar=subtotal + upsell_total,
     )
+
+
+@router.post("/orders/ensure-sheet")
+def ensure_sheet_delivery(
+    body: EnsureSheetDeliveryIn,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Thank-you backup when background sheet POST did not complete (Meta Lead already fired)."""
+
+    try:
+        oid = uuid.UUID(body.order_id.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid order_id") from e
+
+    order = db.scalar(
+        select(Order).where(Order.id == oid).options(selectinload(Order.items))
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if not _order_matches_lead_token(order, body.lead_event_id):
+        logger.warning(
+            "[orders] ensure_sheet bad_token order_number=%s phone=%s",
+            order.order_number,
+            mask_phone_sa(order.phone_local),
+        )
+        raise HTTPException(status_code=403, detail="Invalid lead_event_id")
+
+    if order.sheet_sent_at and not order.sheet_error:
+        return {
+            "ok": True,
+            "already_sent": True,
+            "order_number": order.order_number,
+        }
+
+    try:
+        outcome, sheet_err = resend_persisted_order_to_sheet(order)
+    except ValueError as e:
+        logger.warning("[orders] ensure_sheet build_failed order_number=%s: %s", order.order_number, e)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    mark_order_sheet_delivery(order, outcome, sheet_err)
+    try:
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Failed to persist sheet status") from e
+
+    logger.info(
+        "[orders] ensure_sheet order_number=%s outcome=%s detail=%s",
+        order.order_number,
+        outcome,
+        (sheet_err[:200] if sheet_err else None),
+    )
+    return {
+        "ok": outcome == "ok",
+        "already_sent": False,
+        "outcome": outcome,
+        "detail": sheet_err,
+        "order_number": order.order_number,
+    }
