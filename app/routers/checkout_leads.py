@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from app.schemas.checkout_lead import CheckoutCaptureIn
 from app.services.catalog import resolve_product
@@ -58,7 +58,6 @@ def _deliver_checkout_capture(
 @router.post("/leads/checkout-capture")
 def post_checkout_capture(
     body: CheckoutCaptureIn,
-    background_tasks: BackgroundTasks,
 ) -> dict[str, object]:
     """Append Sheet row when checkout fails after the customer entered name+phone."""
 
@@ -100,8 +99,7 @@ def post_checkout_capture(
     # STATUS column: flag failed checkout for call center (Apps Script passes through).
     payload["status"] = "CHECKOUT_FAILED"
 
-    background_tasks.add_task(
-        _deliver_checkout_capture,
+    _deliver_checkout_capture(
         payload,
         customer_name=customer_name,
         phone_local=phone_local,
@@ -110,7 +108,7 @@ def post_checkout_capture(
         failure_status=body.failure_status,
     )
     logger.info(
-        "[checkout_capture] ENQUEUED order_id=%s phone=%s status=%s",
+        "[checkout_capture] SEND_SYNC order_id=%s phone=%s status=%s",
         capture_id,
         phone_local[:4] + "…",
         body.failure_status,
