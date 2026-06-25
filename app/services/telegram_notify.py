@@ -85,6 +85,30 @@ def format_marketing_lead_telegram_message(
     )
 
 
+def format_checkout_capture_telegram_message(
+    *,
+    sheet_order_id: str,
+    customer_name: str,
+    phone_local: str,
+    total_sar: float,
+    lines: list[tuple[str, int]],
+    failure_status: int | None,
+    sheet_outcome: str,
+) -> str:
+    products = _format_lines(lines)
+    total = int(round(total_sar))
+    status = f"HTTP {failure_status}" if failure_status else "خطأ"
+    return (
+        "⚠️ <b>Checkout فاشل — نبتة لابو</b>\n\n"
+        f"<b>{sheet_order_id}</b>\n"
+        f"👤 {customer_name}\n"
+        f"📞 <code>{phone_local}</code>\n"
+        f"📦 {products}\n"
+        f"💰 ~{total} ر.س\n"
+        f"❗ {status} · Sheet: {sheet_outcome}"
+    )
+
+
 def send_telegram_html(text: str) -> tuple[Outcome, str | None]:
     creds = _telegram_credentials()
     if creds is None:
@@ -173,6 +197,37 @@ def notify_marketing_lead(
     outcome, err = send_telegram_html(text)
     logger.info(
         "[telegram] marketing_lead_notify order_id=%s outcome=%s",
+        sheet_order_id,
+        outcome,
+    )
+    return outcome, err
+
+
+def notify_checkout_capture(
+    *,
+    sheet_order_id: str,
+    customer_name: str,
+    phone_local: str,
+    total_sar: float,
+    lines: list[tuple[str, int]],
+    failure_status: int | None,
+    sheet_outcome: str,
+) -> tuple[Outcome, str | None]:
+    if not _truthy_env("TELEGRAM_NOTIFY_CHECKOUT_CAPTURES", "true"):
+        return "skipped", "checkout_captures_disabled"
+
+    text = format_checkout_capture_telegram_message(
+        sheet_order_id=sheet_order_id,
+        customer_name=customer_name,
+        phone_local=phone_local,
+        total_sar=total_sar,
+        lines=lines,
+        failure_status=failure_status,
+        sheet_outcome=sheet_outcome,
+    )
+    outcome, err = send_telegram_html(text)
+    logger.info(
+        "[telegram] checkout_capture_notify order_id=%s outcome=%s",
         sheet_order_id,
         outcome,
     )

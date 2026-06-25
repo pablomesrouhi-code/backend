@@ -197,7 +197,7 @@ function doPost(e) {
 
     var sheet = getTargetSheet_();
 
-    // STATUS column stays empty (values in JSON ignored for that column).
+    # STATUS column: blank for confirmed orders; optional value for failed checkout captures.
     sheet.appendRow([
       String(data.date),
       String(data.order_id),
@@ -209,7 +209,7 @@ function doPost(e) {
       String(data.quantity),
       Number(data.total_price),
       String(data.currency),
-      '',
+      data.status != null && String(data.status).trim() !== '' ? String(data.status) : '',
     ]);
 
     return jsonResponse({ ok: true, version: WEBHOOK_VERSION, appended: true });

@@ -22,6 +22,7 @@ from app.db_migrate import run_upgrade_head
 from app.routers import admin_dashboard as admin_dashboard_router
 from app.routers import analytics_collect as analytics_collect_router
 from app.routers import capi as capi_router
+from app.routers import checkout_leads as checkout_leads_router
 from app.routers import cod_network_health as cod_network_health_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
@@ -109,6 +110,7 @@ app.add_middleware(
 
 app.include_router(capi_router.router, prefix="/capi", tags=["capi"])
 app.include_router(orders_router.router, prefix="/api", tags=["orders"])
+app.include_router(checkout_leads_router.router, prefix="/api", tags=["leads"])
 app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"])
 app.include_router(sheet_health_router.router, prefix="/api", tags=["sheet"])
 app.include_router(cod_network_health_router.router, prefix="/api", tags=["cod-network"])
