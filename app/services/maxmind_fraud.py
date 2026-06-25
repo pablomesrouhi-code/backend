@@ -147,14 +147,23 @@ def evaluate_order_fraud(
         )
 
     allowed_country = (os.getenv("MAXMIND_ALLOWED_COUNTRY") or "SA").strip().upper()
+    relaxed = _env_bool("MAXMIND_RELAXED", True)
     try:
-        risk_ceiling = float(os.getenv("MAXMIND_MIN_RISK_SCORE_BLOCK", "30"))
+        risk_ceiling = float(os.getenv("MAXMIND_MIN_RISK_SCORE_BLOCK", "75" if relaxed else "30"))
     except ValueError:
-        risk_ceiling = 30.0
-    block_vpn = _env_bool("MAXMIND_BLOCK_VPN", True)
-    block_proxy = _env_bool("MAXMIND_BLOCK_PROXY", True)
-    block_tor = _env_bool("MAXMIND_BLOCK_TOR", True)
-    block_hosting = _env_bool("MAXMIND_BLOCK_HOSTING", True)
+        risk_ceiling = 75.0 if relaxed else 30.0
+    if relaxed:
+        block_vpn = False
+        block_proxy = False
+        block_hosting = False
+        block_tor = _env_bool("MAXMIND_BLOCK_TOR", True)
+        block_foreign_ip = False
+    else:
+        block_vpn = _env_bool("MAXMIND_BLOCK_VPN", True)
+        block_proxy = _env_bool("MAXMIND_BLOCK_PROXY", True)
+        block_tor = _env_bool("MAXMIND_BLOCK_TOR", True)
+        block_hosting = _env_bool("MAXMIND_BLOCK_HOSTING", True)
+        block_foreign_ip = _env_bool("MAXMIND_BLOCK_FOREIGN_IP", True)
 
     if not client_ip or client_ip in ("127.0.0.1", "::1"):
         logger.warning(
@@ -289,19 +298,25 @@ def evaluate_order_fraud(
                 source="minfraud",
             )
     elif country_iso != allowed_country:
+        if block_foreign_ip:
+            logger.info(
+                "[maxmind] block country=%s wanted=%s score=%s phone=%s",
+                country_iso,
+                allowed_country,
+                risk_score,
+                mask_phone_sa(phone_local),
+            )
+            return FraudEvalResult(
+                allowed=False,
+                detail=PUBLIC_BLOCK_DETAIL,
+                fields=fields,
+                raw_response=raw_trim,
+                source="minfraud",
+            )
         logger.info(
-            "[maxmind] block country=%s wanted=%s score=%s phone=%s",
+            "[maxmind] allow foreign_ip=%s phone=%s (MAXMIND_BLOCK_FOREIGN_IP=false)",
             country_iso,
-            allowed_country,
-            risk_score,
             mask_phone_sa(phone_local),
-        )
-        return FraudEvalResult(
-            allowed=False,
-            detail=PUBLIC_BLOCK_DETAIL,
-            fields=fields,
-            raw_response=raw_trim,
-            source="minfraud",
         )
 
     if risk_score is not None and float(risk_score) >= risk_ceiling:
