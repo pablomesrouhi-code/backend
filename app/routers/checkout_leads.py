@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from app.schemas.checkout_lead import CheckoutCaptureIn
 from app.services.catalog import resolve_product
+from app.services.order_guard import validate_customer_name, validate_sa_mobile_local
 from app.services.phone_sa import normalize_sa_phone
 from app.services.pricing import bundle_total_sar
 from app.services.sheet_webhook import build_sheet_row, send_google_sheet_webhook
@@ -62,10 +63,9 @@ def post_checkout_capture(
     """Append Sheet row when checkout fails after the customer entered name+phone."""
 
     try:
-        customer_name = body.customer_name.strip()
-        if len(customer_name) < 2:
-            raise ValueError("invalid name")
+        customer_name = validate_customer_name(body.customer_name)
         phone_local, _e164, phone_digits = normalize_sa_phone(body.phone)
+        validate_sa_mobile_local(phone_local)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

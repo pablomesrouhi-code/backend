@@ -147,11 +147,11 @@ def evaluate_order_fraud(
         )
 
     allowed_country = (os.getenv("MAXMIND_ALLOWED_COUNTRY") or "SA").strip().upper()
-    relaxed = _env_bool("MAXMIND_RELAXED", True)
+    relaxed = _env_bool("MAXMIND_RELAXED", False)
     try:
-        risk_ceiling = float(os.getenv("MAXMIND_MIN_RISK_SCORE_BLOCK", "75" if relaxed else "30"))
+        risk_ceiling = float(os.getenv("MAXMIND_MIN_RISK_SCORE_BLOCK", "75" if relaxed else "50"))
     except ValueError:
-        risk_ceiling = 75.0 if relaxed else 30.0
+        risk_ceiling = 75.0 if relaxed else 50.0
     if relaxed:
         block_vpn = False
         block_proxy = False
@@ -159,10 +159,11 @@ def evaluate_order_fraud(
         block_tor = _env_bool("MAXMIND_BLOCK_TOR", True)
         block_foreign_ip = False
     else:
-        block_vpn = _env_bool("MAXMIND_BLOCK_VPN", True)
-        block_proxy = _env_bool("MAXMIND_BLOCK_PROXY", True)
+        # COD KSA default: block foreign IP + Tor + high risk only (not VPN/proxy/hosting).
+        block_vpn = _env_bool("MAXMIND_BLOCK_VPN", False)
+        block_proxy = _env_bool("MAXMIND_BLOCK_PROXY", False)
         block_tor = _env_bool("MAXMIND_BLOCK_TOR", True)
-        block_hosting = _env_bool("MAXMIND_BLOCK_HOSTING", True)
+        block_hosting = _env_bool("MAXMIND_BLOCK_HOSTING", False)
         block_foreign_ip = _env_bool("MAXMIND_BLOCK_FOREIGN_IP", True)
 
     if not client_ip or client_ip in ("127.0.0.1", "::1"):
