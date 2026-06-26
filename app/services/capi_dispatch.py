@@ -195,11 +195,13 @@ async def send_meta_capi_event(
         client_ip=client_ip,
         user_agent=user_agent,
     )
+    value_out = round(max(0.0, float(value)), 2)
     custom_data: dict[str, Any] = {
         "currency": "SAR",
-        "value": value,
+        "value": value_out,
         "content_type": "product",
         "content_ids": content_ids,
+        "contents": [{"id": cid, "quantity": 1} for cid in content_ids],
     }
     if event_name == "Purchase" and order_number:
         custom_data["order_id"] = order_number
