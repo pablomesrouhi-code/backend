@@ -371,7 +371,7 @@ async def send_snap_capi_event(
     )
 
 
-async def dispatch_order_capi_events(
+async def dispatch_order_purchase_capi_events(
     *,
     order_id: uuid.UUID,
     order_number: str,
@@ -382,22 +382,21 @@ async def dispatch_order_capi_events(
     content_ids: list[str],
     source_url: str | None,
     purchase_event_id: str | None,
-    lead_event_id: str | None,
 ) -> None:
+    """Purchase CAPI only — fired after order save. Lead CAPI waits for thank-you page."""
+
     if not _tracking_enabled():
         logger.info("[capi] skipped — TRACKING_ENABLED=false")
         return
 
     purchase_eid = (purchase_event_id or "").strip() or str(uuid.uuid4())
-    lead_eid = (lead_event_id or "").strip() or str(uuid.uuid4())
     thank_you_url = source_url or "https://nabtalabo.store/thank-you"
 
     logger.info(
-        "[capi] dispatch order_id=%s order_number=%s purchase_event_id=%s lead_event_id=%s content_ids=%s value=%s",
+        "[capi] purchase_dispatch order_id=%s order_number=%s purchase_event_id=%s content_ids=%s value=%s",
         order_id,
         order_number,
         purchase_eid,
-        lead_eid,
         content_ids,
         value,
     )
@@ -408,17 +407,6 @@ async def dispatch_order_capi_events(
             event_id=purchase_eid,
             order_id=order_id,
             order_number=order_number,
-            phone_plain=phone_plain,
-            client_ip=client_ip,
-            user_agent=user_agent,
-            value=value,
-            content_ids=content_ids,
-            source_url=thank_you_url,
-        ),
-        send_meta_capi_event(
-            event_name="Lead",
-            event_id=lead_eid,
-            order_id=order_id,
             phone_plain=phone_plain,
             client_ip=client_ip,
             user_agent=user_agent,
@@ -438,8 +426,61 @@ async def dispatch_order_capi_events(
             content_ids=content_ids,
             source_url=thank_you_url,
         ),
-        send_tiktok_capi_event(
-            event_name=TIKTOK_LEAD,
+        send_snap_capi_event(
+            event_name=SNAP_PURCHASE,
+            event_id=purchase_eid,
+            order_id=order_id,
+            order_number=order_number,
+            phone_plain=phone_plain,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            value=value,
+            content_ids=content_ids,
+            source_url=thank_you_url,
+        ),
+        return_exceptions=True,
+    )
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error("[capi] purchase dispatch task failed: %s", result)
+
+
+async def dispatch_thank_you_lead_capi_events(
+    *,
+    order_id: uuid.UUID,
+    order_number: str,
+    phone_plain: str,
+    client_ip: str | None,
+    user_agent: str | None,
+    value: float,
+    content_ids: list[str],
+    lead_event_id: str,
+) -> None:
+    """Lead CAPI — only after thank-you page (matches browser `trackLead`)."""
+
+    if not _tracking_enabled():
+        logger.info("[capi] lead skipped — TRACKING_ENABLED=false")
+        return
+
+    lead_eid = lead_event_id.strip()
+    if not lead_eid:
+        logger.warning("[capi] lead skipped — empty lead_event_id order_id=%s", order_id)
+        return
+
+    thank_you_url = "https://nabtalabo.store/thank-you"
+
+    logger.info(
+        "[capi] lead_dispatch order_id=%s order_number=%s lead_event_id=%s content_ids=%s value=%s",
+        order_id,
+        order_number,
+        lead_eid,
+        content_ids,
+        value,
+    )
+
+    results = await asyncio.gather(
+        send_meta_capi_event(
+            event_name="Lead",
             event_id=lead_eid,
             order_id=order_id,
             phone_plain=phone_plain,
@@ -449,11 +490,10 @@ async def dispatch_order_capi_events(
             content_ids=content_ids,
             source_url=thank_you_url,
         ),
-        send_snap_capi_event(
-            event_name=SNAP_PURCHASE,
-            event_id=purchase_eid,
+        send_tiktok_capi_event(
+            event_name=TIKTOK_LEAD,
+            event_id=lead_eid,
             order_id=order_id,
-            order_number=order_number,
             phone_plain=phone_plain,
             client_ip=client_ip,
             user_agent=user_agent,
@@ -477,4 +517,32 @@ async def dispatch_order_capi_events(
     )
     for result in results:
         if isinstance(result, Exception):
-            logger.error("[capi] dispatch task failed: %s", result)
+            logger.error("[capi] lead dispatch task failed: %s", result)
+
+
+# Back-compat alias (order router import).
+async def dispatch_order_capi_events(
+    *,
+    order_id: uuid.UUID,
+    order_number: str,
+    phone_plain: str,
+    client_ip: str | None,
+    user_agent: str | None,
+    value: float,
+    content_ids: list[str],
+    source_url: str | None,
+    purchase_event_id: str | None,
+    lead_event_id: str | None = None,
+) -> None:
+    del lead_event_id
+    await dispatch_order_purchase_capi_events(
+        order_id=order_id,
+        order_number=order_number,
+        phone_plain=phone_plain,
+        client_ip=client_ip,
+        user_agent=user_agent,
+        value=value,
+        content_ids=content_ids,
+        source_url=source_url,
+        purchase_event_id=purchase_event_id,
+    )

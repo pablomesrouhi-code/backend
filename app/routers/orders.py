@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.deps import get_db
 from app.log_safe import mask_phone_sa
-from app.models.order_models import Order, OrderItem
+from app.models.order_models import Order, OrderItem, TrackingEvent
 from app.schemas.order_create import (
     CreateOrderRequest,
     CreateOrderResponse,
@@ -33,6 +33,7 @@ from app.services.sheet_webhook import (
     mark_order_sheet_delivery,
     resend_persisted_order_to_sheet,
 )
+from app.services.capi_dispatch import dispatch_thank_you_lead_capi_events
 from app.services.telegram_notify import notify_new_order
 from app.request_ip import client_ip
 from app.services.maxmind_fraud import evaluate_order_fraud
@@ -56,12 +57,6 @@ def _order_matches_lead_token(order: Order, lead_event_id: str) -> bool:
         if candidate and candidate.strip() == token:
             return True
     return False
-
-
-async def _run_sheet_delivery_async(order_id: uuid.UUID, payload: dict[str, str | int | float]) -> None:
-    """Run sync sheet POST in a worker thread so it always runs after the HTTP response (reliable with ASGI)."""
-
-    await asyncio.to_thread(apply_sheet_delivery_to_order, order_id, payload)
 
 
 async def _run_cod_network_delivery_async(
@@ -88,6 +83,20 @@ async def _run_telegram_order_notify_async(
         lines=lines,
         accepted_upsell=accepted_upsell,
     )
+
+
+def _lead_capi_already_sent(db: Session, order_id: uuid.UUID, lead_event_id: str) -> bool:
+    row = db.scalar(
+        select(TrackingEvent.id).where(
+            TrackingEvent.order_id == order_id,
+            TrackingEvent.event_id == lead_event_id,
+            TrackingEvent.event_name == "Lead",
+            TrackingEvent.platform == "meta",
+            TrackingEvent.response_status.isnot(None),
+            TrackingEvent.response_status < 400,
+        )
+    )
+    return row is not None
 
 
 async def _run_order_capi_async(
@@ -335,8 +344,8 @@ def create_order(
             total_sar=subtotal + upsell_total,
             lines=sheet_lines,
         )
-        background_tasks.add_task(_run_sheet_delivery_async, order_id, sheet_payload)
-        logger.info("[orders] SHEET_ENQUEUED order_number=%s order_id=%s", order_number, order_id)
+        apply_sheet_delivery_to_order(order_id, sheet_payload)
+        logger.info("[orders] SHEET_SYNC_DONE order_number=%s order_id=%s", order_number, order_id)
     except Exception:
         logger.exception("[orders] sheet_row_build_failed order_number=%s", order_number)
         try:
@@ -455,5 +464,64 @@ def ensure_sheet_delivery(
         "already_sent": False,
         "outcome": outcome,
         "detail": sheet_err,
+        "order_number": order.order_number,
+    }
+
+
+@router.post("/orders/ensure-lead-capi")
+async def ensure_lead_capi(
+    body: EnsureSheetDeliveryIn,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Thank-you only: Meta/TikTok/Snap Lead CAPI (campaign counts real thank-you visits)."""
+
+    try:
+        oid = uuid.UUID(body.order_id.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid order_id") from e
+
+    order = db.scalar(
+        select(Order).where(Order.id == oid).options(selectinload(Order.items))
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    lead_eid = body.lead_event_id.strip()
+    if not _order_matches_lead_token(order, lead_eid):
+        logger.warning(
+            "[orders] ensure_lead_capi bad_token order_number=%s phone=%s",
+            order.order_number,
+            mask_phone_sa(order.phone_local),
+        )
+        raise HTTPException(status_code=403, detail="Invalid lead_event_id")
+
+    if _lead_capi_already_sent(db, order.id, lead_eid):
+        return {
+            "ok": True,
+            "already_sent": True,
+            "order_number": order.order_number,
+        }
+
+    content_ids = [it.product_id.strip().lower() for it in order.items]
+
+    await dispatch_thank_you_lead_capi_events(
+        order_id=order.id,
+        order_number=order.order_number,
+        phone_plain=order.phone_local,
+        client_ip=order.ip_address,
+        user_agent=order.user_agent,
+        value=float(order.total_sar),
+        content_ids=content_ids,
+        lead_event_id=lead_eid,
+    )
+
+    logger.info(
+        "[orders] ensure_lead_capi order_number=%s lead_event_id=%s",
+        order.order_number,
+        lead_eid,
+    )
+    return {
+        "ok": True,
+        "already_sent": False,
         "order_number": order.order_number,
     }
