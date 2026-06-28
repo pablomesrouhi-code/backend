@@ -539,8 +539,9 @@
       <div class="calc-banner" id="settings-status">Loading…</div>
       <div class="calc-block">
         <h4>أسعار الباقات (ر.س)</h4>
+        <p class="hint" style="margin:-4px 0 10px;">غيّري «1 قطعة» — الباقات 2 و 3 تتحدّث تلقائياً (نفس نسب 279/349).</p>
         <div class="calc-grid">
-          <label class="field">1 قطعة<input type="number" id="st-bundle-1" step="1" min="0"/></label>
+          <label class="field">1 قطعة — AOV أساسي<input type="number" id="st-bundle-1" step="1" min="0"/></label>
           <label class="field">2 قطع<input type="number" id="st-bundle-2" step="1" min="0"/></label>
           <label class="field">3 قطع<input type="number" id="st-bundle-3" step="1" min="0"/></label>
           <label class="field">Upsell (ر.س)<input type="number" id="st-upsell" step="1" min="0"/></label>
@@ -1293,6 +1294,13 @@
       ]);
     }
 
+    function syncBundlesFromAov() {
+      const one = Math.round(pcNum('st-bundle-1'));
+      if (!one || one < 0) return;
+      document.getElementById('st-bundle-2').value = Math.round(one * 279 / 199);
+      document.getElementById('st-bundle-3').value = Math.round(one * 349 / 199);
+    }
+
     async function loadStoreSettings() {
       const status = document.getElementById('settings-status');
       const note = document.getElementById('settings-note');
@@ -1401,6 +1409,7 @@
     });
     document.getElementById('settings-save').addEventListener('click', () => void saveStoreSettings());
     document.getElementById('settings-reload').addEventListener('click', () => void loadStoreSettings());
+    document.getElementById('st-bundle-1').addEventListener('input', syncBundlesFromAov);
     document.getElementById('tab-capi').addEventListener('click', () => {
       showAdminTab('capi');
       void loadCapiEvents();
