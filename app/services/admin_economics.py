@@ -10,7 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.order_models import Order, OrderItem
-from app.services.pricing import BUNDLE_PRICES_SAR, UPSELL_PRICE_SAR
+from app.services.pricing import upsell_price_sar
+from app.services.store_settings import sar_per_usd_rate, cod_fees_usd_map
 
 _DEFAULT_COD_FEES_USD: dict[str, float] = {
     # COD Network KSA seller ops (USD) — override via env to match your agreement.
@@ -33,15 +34,13 @@ def _env_float(name: str, default: float) -> float:
 
 
 def sar_per_usd() -> float:
-    raw = (os.getenv("SAR_PER_USD") or "3.75").strip()
-    try:
-        v = float(raw)
-        return v if v > 0 else 3.75
-    except ValueError:
-        return 3.75
+    return sar_per_usd_rate()
 
 
 def cod_ops_fees_usd() -> dict[str, float]:
+    fees = cod_fees_usd_map()
+    if fees:
+        return fees
     return {
         "per_confirmed_lead": _env_float(
             "COD_FEE_CONFIRMATION_USD", _DEFAULT_COD_FEES_USD["per_confirmed_lead"]
@@ -65,9 +64,12 @@ def cod_ops_fees_sar(rate: float | None = None) -> dict[str, float]:
 
 
 def catalog_selling_prices_sar() -> dict[int, float]:
-    """List selling price per piece for each bundle tier (199 / 279 / 349)."""
+    """List selling price per piece for each bundle tier."""
 
-    return {qty: round(BUNDLE_PRICES_SAR[qty] / qty, 2) for qty in sorted(BUNDLE_PRICES_SAR)}
+    from app.services.store_settings import bundle_prices_sar_int
+
+    prices = bundle_prices_sar_int()
+    return {qty: round(prices[qty] / qty, 2) for qty in sorted(prices)}
 
 
 def _order_filters(start_dt: datetime | None, end_dt: datetime | None) -> list[Any]:
@@ -142,10 +144,10 @@ def compute_store_economics(
         round(subtotal_sar / total_main_pieces, 2) if total_main_pieces > 0 else 0.0
     )
     selling_price_usd = round(selling_price_sar / rate, 2) if selling_price_sar > 0 and rate > 0 else 0.0
-    upsell_price_usd = round(UPSELL_PRICE_SAR / rate, 2) if rate > 0 else 0.0
+    upsell_price_usd = round(upsell_price_sar() / rate, 2) if rate > 0 else 0.0
 
     computed_aov_sar = round(
-        avg_main_pieces * selling_price_sar + upsell_attach_rate * UPSELL_PRICE_SAR,
+        avg_main_pieces * selling_price_sar + upsell_attach_rate * upsell_price_sar(),
         2,
     )
     aov_usd = round(aov_sar / rate, 2) if orders_count and rate > 0 else 0.0
@@ -173,7 +175,7 @@ def compute_store_economics(
         "total_main_pieces": total_main_pieces,
         "selling_price_per_piece_sar": selling_price_sar,
         "selling_price_per_piece_usd": selling_price_usd,
-        "upsell_price_sar": UPSELL_PRICE_SAR,
+        "upsell_price_sar": upsell_price_sar(),
         "upsell_price_usd": upsell_price_usd,
         "computed_aov_sar": computed_aov_sar,
         "computed_aov_usd": computed_aov_usd,

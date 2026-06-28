@@ -27,6 +27,7 @@ from app.routers import cod_network_health as cod_network_health_router
 from app.routers import diagnostics as diagnostics_router
 from app.routers import orders as orders_router
 from app.routers import sheet_health as sheet_health_router
+from app.routers import store_pricing as store_pricing_router
 from app.services.sheet_webhook import _webhook_url_from_env
 
 logging.basicConfig(level=logging.INFO)
@@ -115,6 +116,7 @@ app.include_router(diagnostics_router.router, prefix="/api", tags=["diagnostics"
 app.include_router(sheet_health_router.router, prefix="/api", tags=["sheet"])
 app.include_router(cod_network_health_router.router, prefix="/api", tags=["cod-network"])
 app.include_router(analytics_collect_router.router, prefix="/api", tags=["analytics"])
+app.include_router(store_pricing_router.router, prefix="/api", tags=["store"])
 app.include_router(admin_dashboard_router.router, prefix="/api", tags=["admin"])
 
 

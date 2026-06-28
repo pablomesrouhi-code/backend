@@ -23,7 +23,7 @@ from app.models.analytics_models import AnalyticsEvent
 from app.models.order_models import Order, OrderItem, TrackingEvent
 from app.services.admin_economics import compute_store_economics, sar_per_usd
 from app.services.cod_network import mark_order_cod_delivery, resend_persisted_order_to_cod_network
-from app.services.sheet_webhook import mark_order_sheet_delivery, resend_persisted_order_to_sheet
+from app.services.store_settings import get_store_config, save_store_config
 
 router = APIRouter()
 
@@ -443,6 +443,8 @@ def admin_profit_baseline(
         economics = compute_store_economics(db)
         economics["range"] = None
 
+    economics["profit_defaults"] = get_store_config(db).get("profit_defaults") or {}
+
     # Back-compat field names for profit calculator JS
     economics["avg_pieces_per_order"] = economics["avg_main_pieces_per_order"]
     return economics
@@ -730,3 +732,52 @@ def admin_resend_failed_sheets(
         "cod_failed": cod_failed if body.resend_cod else None,
         "results": results,
     }
+
+
+class StoreSettingsPatch(BaseModel):
+    bundle_prices_sar: dict[str, int] | None = None
+    upsell_price_sar: int | None = Field(default=None, ge=0, le=9999)
+    sar_per_usd: float | None = Field(default=None, gt=0, le=20)
+    cod_fees_usd: dict[str, float] | None = None
+    profit_defaults: dict[str, float] | None = None
+
+
+@router.get("/admin/data/store-settings")
+def admin_get_store_settings(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    cfg = get_store_config(db)
+    bundles = cfg.get("bundle_prices_sar") or {}
+    computed_aov = 0.0
+    try:
+        b1 = float(bundles.get("1", 199))
+        upsell = float(cfg.get("upsell_price_sar", 99))
+        pd = cfg.get("profit_defaults") or {}
+        avg_p = float(pd.get("avg_main_pieces", 1))
+        attach = float(pd.get("upsell_attach_pct", 0)) / 100.0
+        sell = b1
+        computed_aov = avg_p * sell + attach * upsell
+    except (TypeError, ValueError):
+        computed_aov = float(bundles.get("1", 199))
+    return {
+        **cfg,
+        "computed_aov_sar_hint": round(computed_aov, 2),
+        "notes": (
+            "Changes apply to checkout immediately. Storefront labels update via /api/pricing. "
+            "Env SAR_PER_USD and COD_FEE_* override DB when set in EasyPanel."
+        ),
+    }
+
+
+@router.put("/admin/data/store-settings")
+def admin_put_store_settings(
+    body: StoreSettingsPatch,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    patch = body.model_dump(exclude_none=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="No settings provided")
+    saved = save_store_config(db, patch)
+    return {"ok": True, "config": saved}

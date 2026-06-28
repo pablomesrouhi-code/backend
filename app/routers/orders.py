@@ -39,10 +39,10 @@ from app.request_ip import client_ip
 from app.services.maxmind_fraud import evaluate_order_fraud
 from app.services.order_guard import validate_customer_name, validate_sa_mobile_local
 from app.services.pricing import (
-    UPSELL_PRICE_SAR,
     allocate_line_totals,
     bundle_total_sar,
     line_unit_prices,
+    upsell_price_sar,
 )
 
 router = APIRouter()
@@ -179,7 +179,7 @@ def create_order(
         except ValueError as e:
             logger.warning("[orders] bad_upsell_id %s: %s", body.upsell_product_id, e)
             raise HTTPException(status_code=400, detail=str(e)) from e
-        upsell_total = UPSELL_PRICE_SAR
+        upsell_total = upsell_price_sar()
 
     try:
         customer_name = validate_customer_name(body.customer_name)
@@ -278,8 +278,8 @@ def create_order(
                 product_name_en=en,
                 item_type="post_validation_upsell",
                 offer_qty=1,
-                unit_price_sar=UPSELL_PRICE_SAR,
-                line_total_sar=UPSELL_PRICE_SAR,
+                unit_price_sar=upsell_price_sar(),
+                line_total_sar=upsell_price_sar(),
             )
         )
 

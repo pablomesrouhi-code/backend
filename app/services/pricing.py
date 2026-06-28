@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+from app.services.store_settings import bundle_prices_sar_int, upsell_price_sar_int
+
+# Back-compat for imports; live values come from admin store_settings.
 BUNDLE_PRICES_SAR: dict[int, int] = {1: 199, 2: 279, 3: 349}
 UPSELL_PRICE_SAR = 99
 
 
+def _bundle_prices() -> dict[int, int]:
+    return bundle_prices_sar_int()
+
+
+def upsell_price_sar() -> int:
+    return upsell_price_sar_int()
+
+
 def bundle_total_sar(total_offer_qty: int) -> int:
-    if total_offer_qty not in BUNDLE_PRICES_SAR:
+    prices = _bundle_prices()
+    if total_offer_qty not in prices:
         raise ValueError("Cart must have 1, 2, or 3 items for standard bundle pricing")
-    return BUNDLE_PRICES_SAR[total_offer_qty]
+    return prices[total_offer_qty]
 
 
 def allocate_line_totals(bundle: int, quantities: list[int]) -> list[int]:
