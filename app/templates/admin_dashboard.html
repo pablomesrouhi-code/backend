@@ -492,7 +492,6 @@
         <label class="field">SAR per 1 USD<input type="number" id="pc-sar-usd" step="0.01" min="0.01" value="3.75"/></label>
         <label class="field">AOV (SAR)<input type="number" id="pc-aov-sar" step="0.01" min="0"/></label>
         <label class="field">AOV (USD)<input type="number" id="pc-aov-usd" step="0.01" min="0"/></label>
-        <label class="field">Upsell attach rate (%)<input type="number" id="pc-upsell-pct" step="0.1" min="0" max="100" value="0"/></label>
         <label class="field">Avg main pieces / order<input type="number" id="pc-avg-pieces" step="0.01" min="0"/></label>
         <label class="field">Selling price / piece (USD)<input type="number" id="pc-selling-price" step="0.01" min="0"/></label>
         <label class="field">Selling price / piece (SAR)<input type="number" id="pc-selling-price-sar" step="0.01" min="0"/></label>
@@ -1030,10 +1029,6 @@
     }
 
     function pcUpsellRate() {
-      const pctEl = document.getElementById('pc-upsell-pct');
-      if (pctEl && pctEl.value !== '') {
-        return Math.min(1, Math.max(0, pcNum('pc-upsell-pct') / 100));
-      }
       return Math.min(1, Math.max(0, pcUpsellAttachRate));
     }
 
@@ -1203,10 +1198,6 @@
           ? j.upsell_attach_rate
           : (j.upsell_attach_rate_percent ?? 0) / 100;
         pcUpsellPriceSar = j.upsell_price_sar ?? 99;
-        const upsPctEl = document.getElementById('pc-upsell-pct');
-        if (upsPctEl && pcUpsellAttachRate != null) {
-          upsPctEl.value = (pcUpsellAttachRate * 100).toFixed(1);
-        }
         const pd = j.profit_defaults || profitBaseline?.profit_defaults || {};
         if (pd.cpl_usd != null) document.getElementById('pc-cpl').value = pd.cpl_usd;
         if (pd.confirmation_pct != null) document.getElementById('pc-conf-pct').value = pd.confirmation_pct;
@@ -1216,7 +1207,7 @@
           document.getElementById('pc-avg-pieces').value = pd.avg_main_pieces;
         }
         if (pd.upsell_attach_pct != null && pcUpsellAttachRate === 0) {
-          upsPctEl.value = pd.upsell_attach_pct;
+          pcUpsellAttachRate = pd.upsell_attach_pct / 100;
         }
         const sellUsd = j.selling_price_per_piece_usd ?? 0;
         const sellSar = j.selling_price_per_piece_sar ?? 0;
@@ -1339,7 +1330,6 @@
       document.getElementById('pc-del-pct').value = document.getElementById('st-pd-del').value;
       document.getElementById('pc-product-cost').value = document.getElementById('st-pd-cost').value;
       document.getElementById('pc-avg-pieces').value = document.getElementById('st-pd-pieces').value;
-      document.getElementById('pc-upsell-pct').value = document.getElementById('st-pd-upsell').value;
       document.getElementById('pc-sar-usd').value = document.getElementById('st-sar-usd').value;
       pcUpsellPriceSar = pcNum('st-upsell') || 99;
       syncAovFromEconomics();
@@ -1439,7 +1429,7 @@
       syncSellingFromSar();
       runAll();
     });
-    ['pc-product-cost','pc-cpl','pc-conf-pct','pc-del-pct','pc-leads','pc-upsell-pct','pc-aov-usd','pc-aov-sar'].forEach((id) => {
+    ['pc-product-cost','pc-cpl','pc-conf-pct','pc-del-pct','pc-leads','pc-aov-usd','pc-aov-sar'].forEach((id) => {
       document.getElementById(id).addEventListener('input', runAll);
     });
     pcApplyFees(null, null, 'pc-fees-row');
