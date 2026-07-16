@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from app.schemas.checkout_lead import CheckoutCaptureIn
-from app.services.catalog import resolve_product
+from app.services.catalog import ensure_product_sellable
 from app.services.order_guard import validate_customer_name, validate_sa_mobile_local
 from app.services.phone_sa import normalize_sa_phone
 from app.services.pricing import bundle_total_sar
@@ -74,7 +74,7 @@ def post_checkout_capture(
     for line in body.items:
         pid = line.product_id.strip().lower()
         try:
-            resolve_product(pid)
+            ensure_product_sellable(pid)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         lines.append((pid, line.offer_qty))

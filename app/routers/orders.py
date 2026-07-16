@@ -19,7 +19,7 @@ from app.schemas.order_create import (
     CreateOrderResponse,
     EnsureSheetDeliveryIn,
 )
-from app.services.catalog import resolve_product
+from app.services.catalog import ensure_product_sellable, resolve_product
 from app.services.cod_network import (
     apply_cod_network_delivery_to_order,
     build_cod_network_lead_payload,
@@ -152,7 +152,7 @@ def create_order(
     product_keys: list[str] = []
     for line in body.items:
         try:
-            resolve_product(line.product_id)
+            ensure_product_sellable(line.product_id)
         except ValueError as e:
             logger.warning("[orders] bad_product_id %s: %s", line.product_id, e)
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -175,7 +175,7 @@ def create_order(
                 detail="upsell_product_id required when accepted_upsell is true",
             )
         try:
-            resolve_product(body.upsell_product_id)
+            ensure_product_sellable(body.upsell_product_id)
         except ValueError as e:
             logger.warning("[orders] bad_upsell_id %s: %s", body.upsell_product_id, e)
             raise HTTPException(status_code=400, detail=str(e)) from e

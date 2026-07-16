@@ -39,12 +39,25 @@ PRODUCT_SKUS: dict[str, str] = {
     "shahr-hadi": "CLCYPWFH",
 }
 
+# يبقى الكاتالوغ الكامل أعلاه لقراءة الطلبات القديمة، لكن البيع الحالي محصور هنا.
+SELLABLE_PRODUCT_IDS: frozenset[str] = frozenset({"rawnaq-c", "shahr-hadi"})
+
 
 def resolve_product(product_id: str) -> tuple[str, str]:
     key = product_id.strip().lower()
     if key not in PRODUCT_NAMES:
         raise ValueError(f"Unknown product_id: {product_id}")
     return PRODUCT_NAMES[key]
+
+
+def ensure_product_sellable(product_id: str) -> str:
+    """Validate a new cart/upsell line against the current live inventory."""
+
+    key = product_id.strip().lower()
+    resolve_product(key)
+    if key not in SELLABLE_PRODUCT_IDS:
+        raise ValueError("نفدت كمية هذا المنتج حالياً. يرجى اختيار منتج متوفر.")
+    return key
 
 
 def resolve_sku(product_id: str) -> str:
