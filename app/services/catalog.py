@@ -12,8 +12,8 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
         "KhiffaBiotic Probiotic Gummies",
     ),
     "laylmag": (
-        "ليل ماج - علكات المغنيسيوم و L-Theanine",
-        "LaylMag Magnesium Gummies",
+        "ليل ماج - مسحوق المغنيسيوم 14 في 1 و L-Theanine",
+        "LaylMag 14-in-1 Magnesium Powder",
     ),
     "quwwat-sha3r": (
         "قوة شعر - مسحوق كولاجين بحري للشعر",
