@@ -41,7 +41,7 @@ def _status_response() -> CodNetworkStatus:
         probe_error=probe_error,
         hint=(
             "Set COD_NETWORK_API_TOKEN + COD_NETWORK_ENABLED=true on the API service. "
-            "Each checkout POSTs a lead to COD Network (SKU RWCFH by default)."
+            "Each checkout POSTs a lead to COD Network (SKU from catalog PRODUCT_SKUS)."
         ),
     )
 

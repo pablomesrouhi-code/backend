@@ -31,7 +31,7 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
 
 # Seller SKU per product — used in Google Sheet webhook and COD Network leads.
 PRODUCT_SKUS: dict[str, str] = {
-    "rawnaq-c": "RWCFH",
+    "rawnaq-c": "MP-39GYGBTANIO7",
     "khiffabiotic": "PRBTCS",
     "laylmag": "MGAGFD",
     "quwwat-sha3r": "SRHRPW",
