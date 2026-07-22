@@ -27,6 +27,10 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
         "شهر هادئ - مسحوق دعم الدورة والتوازن الهرموني",
         "Shahr Hadi PMS Calm Support Powder",
     ),
+    "naseej": (
+        "نسيج - مسحوق كولاجين متعدد للتماسك من الداخل",
+        "Naseej Multi Collagen Peptides Powder",
+    ),
 }
 
 # Seller SKU per product — used in Google Sheet webhook and COD Network leads.
@@ -37,10 +41,11 @@ PRODUCT_SKUS: dict[str, str] = {
     "quwwat-sha3r": "SRHRPW",
     "wudouh": "PSPFH",
     "shahr-hadi": "CLCYPWFH",
+    "naseej": "NSJMCP",
 }
 
 # يبقى الكاتالوغ الكامل أعلاه لقراءة الطلبات القديمة، لكن البيع الحالي محصور هنا.
-SELLABLE_PRODUCT_IDS: frozenset[str] = frozenset({"rawnaq-c", "shahr-hadi"})
+SELLABLE_PRODUCT_IDS: frozenset[str] = frozenset({"rawnaq-c", "shahr-hadi", "naseej"})
 
 
 def resolve_product(product_id: str) -> tuple[str, str]:
