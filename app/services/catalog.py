@@ -28,7 +28,7 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
         "Shahr Hadi PMS Calm Support Powder",
     ),
     "naseej": (
-        "نسيج - مسحوق كولاجين متعدد للتماسك من الداخل",
+        "نسيج - مسحوق كولاجين متعدد لقوام الوجه من الداخل",
         "Naseej Multi Collagen Peptides Powder",
     ),
 }
