@@ -41,7 +41,7 @@ PRODUCT_SKUS: dict[str, str] = {
     "quwwat-sha3r": "SRHRPW",
     "wudouh": "PSPFH",
     "shahr-hadi": "CLCYPWFH",
-    "naseej": "NSJMCP",
+    "naseej": "MP-ZTYR4BRMRP0F",
 }
 
 # يبقى الكاتالوغ الكامل أعلاه لقراءة الطلبات القديمة، لكن البيع الحالي محصور هنا.
