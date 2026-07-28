@@ -28,7 +28,7 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
         "Shahr Hadi PMS Calm Support Powder",
     ),
     "naseej": (
-        "نسيج - مسحوق كولاجين للتجاعيد والشعر والبشرة والأظافر من الداخل",
+        "نسيج - مسحوق كولاجين متعدد لقوام الوجه من الداخل",
         "Naseej Multi Collagen Peptides Powder",
     ),
 }
@@ -40,7 +40,7 @@ PRODUCT_SKUS: dict[str, str] = {
     "laylmag": "MGAGFD",
     "quwwat-sha3r": "SRHRPW",
     "wudouh": "PSPFH",
-    "shahr-hadi": "CLCYPWFH",
+    "shahr-hadi": "CLCYPWFHH",
     "naseej": "MP-ZTYR4BRMRP0F",
 }
 
