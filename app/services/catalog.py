@@ -44,9 +44,9 @@ PRODUCT_SKUS: dict[str, str] = {
     "laylmag": "MGAGFD",
     "quwwat-sha3r": "SRHRPW",
     "wudouh": "PSPFH",
-    "shahr-hadi": "MP-P9XG0HKJNKRZ",
+    "shahr-hadi": "CLCYPWFHH",
     "naseej": "MP-ZTYR4BRMRP0F",
-    "vitaflow": "VTFLCW",
+    "vitaflow": "MP-P9XG0HKJNKRZ",
 }
 
 # يبقى الكاتالوغ الكامل أعلاه لقراءة الطلبات القديمة، لكن البيع الحالي محصور هنا.
