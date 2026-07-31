@@ -44,7 +44,7 @@ PRODUCT_SKUS: dict[str, str] = {
     "laylmag": "MGAGFD",
     "quwwat-sha3r": "SRHRPW",
     "wudouh": "PSPFH",
-    "shahr-hadi": "CLCYPWFHH",
+    "shahr-hadi": "MP-P9XG0HKJNKRZ",
     "naseej": "MP-ZTYR4BRMRP0F",
     "vitaflow": "VTFLCW",
 }
