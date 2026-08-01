@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.services.admin_economics import catalog_unit_price_sar, cod_ops_fees_usd, sar_per_usd
+from app.services.admin_economics import catalog_selling_prices_sar, cod_ops_fees_usd, sar_per_usd
 from app.services.store_settings import get_store_config, save_store_config
 
 
