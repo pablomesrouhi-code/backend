@@ -327,12 +327,30 @@
     .ads-verdict .v-summary {
       margin: 10px 0 0; font-size: .95rem; line-height: 1.55; color: var(--text);
     }
-    .ads-tips { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .ads-resume {
+      margin: 14px 0 0; padding: 12px 14px; border-radius: 12px;
+      background: rgba(0,0,0,.03); border: 1px solid var(--border);
+      font-size: .84rem; line-height: 1.55; color: var(--text);
+    }
+    .ads-resume p { margin: 0 0 6px; }
+    .ads-resume p:last-child { margin: 0; }
+    .ads-actions-title, .ads-tips-title {
+      margin: 16px 0 8px; font-size: .78rem; font-weight: 800;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    }
+    .ads-tips { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
     .ads-tips li {
       padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
       background: #fff; font-size: .84rem; line-height: 1.45; color: var(--text);
     }
+    .ads-tips.actions li {
+      border-color: rgba(45, 157, 120, 0.35);
+      background: linear-gradient(90deg, rgba(45,157,120,.08), #fff 40%);
+      font-weight: 600;
+    }
     .ads-tips li::before { content: "→ "; color: var(--authority); font-weight: 800; }
+    .ads-tips.actions li::before { content: counter(ads-act) ". "; counter-increment: ads-act; }
+    .ads-tips.actions { counter-reset: ads-act; }
     .ads-kpi-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 10px; margin: 16px 0 4px;
@@ -580,18 +598,18 @@
     </div>
 
     <div class="panel" id="ads-panel" style="display:none;margin-top:16px;">
-      <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">مختبر الإعلانات — ربح ولا خسارة؟</p>
+      <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">مختبر الإعلانات — Winner ولا Kill؟</p>
       <p style="font-size:.86rem;color:var(--muted);margin:0 0 14px;line-height:1.55;">
-        دخل <strong>صرف الإعلان</strong> + <strong>الـ leads</strong> اللي جاب. الإيراد والتأكيد والتسليم اختياريين —
-        إلا خليتهم فاضيين كنقدّروهم من إعدادات المتجر (AOV · تأكيد · تسليم · COD · COGS).
+        غير metrics ديال الـ <strong>publicité</strong> من Ads Manager: CPC · CTR · CPM · Hook rate · Frequency…
+        كيقول ليك شنو تخلّي و شنو تحيّد. بلا مؤكدين ولا تسليم.
       </p>
 
       <div id="ads-verdict-box" class="ads-verdict" style="display:none;"></div>
 
       <div class="calc-block">
-        <h4>فورم التشغيل (Meta / TikTok / …)</h4>
+        <h4>الإعلان اللي اختبرتي</h4>
         <div class="calc-grid">
-          <label class="field">اسم التشغيل / الكامباين<input type="text" id="ads-name" placeholder="مثلاً: Scale Rawnaq UGC"/></label>
+          <label class="field">اسم الإعلان / الـ creative<input type="text" id="ads-name" placeholder="مثلاً: UGC hook ألم شعر v3"/></label>
           <label class="field">المنصة
             <select id="ads-platform" style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fdfcfc;">
               <option value="meta">Meta</option>
@@ -602,16 +620,25 @@
           </label>
           <label class="field">من يوم<input type="date" id="ads-day-start"/></label>
           <label class="field">إلى يوم<input type="date" id="ads-day-end"/></label>
-          <label class="field">صرف الإعلانات (ر.س) *<input type="number" id="ads-spend" step="0.01" min="0" placeholder="مثلاً 1500"/></label>
-          <label class="field">Leads اللي جاب *<input type="number" id="ads-leads" step="1" min="0" placeholder="مثلاً 120"/></label>
-          <label class="field">مؤكَّدين (اختياري)<input type="number" id="ads-confirmed" step="1" min="0" placeholder="فارغ = تقدير %"/></label>
-          <label class="field">مُسلَّمين (اختياري)<input type="number" id="ads-delivered" step="1" min="0" placeholder="فارغ = تقدير %"/></label>
-          <label class="field">إيراد حقيقي ر.س (اختياري)<input type="number" id="ads-revenue" step="0.01" min="0" placeholder="فارغ = AOV × مسلَّم"/></label>
-          <label class="field">ملاحظات<input type="text" id="ads-notes" placeholder="hooks، audience…"/></label>
+          <label class="field">عدد الأيام<input type="number" id="ads-days" step="1" min="1" placeholder="فارغ = من التواريخ"/></label>
+          <label class="field">Spend ($)<input type="number" id="ads-spend" step="0.01" min="0" placeholder="مثلاً 40"/></label>
+          <label class="field">Leads (اختياري)<input type="number" id="ads-leads" step="1" min="0" placeholder="باش نحسبو CPL"/></label>
+          <label class="field">ملاحظات / الزاوية<input type="text" id="ads-notes" placeholder="hook، عرض، audience…"/></label>
+        </div>
+        <h4 style="margin-top:18px;">Metrics Ads Manager</h4>
+        <div class="calc-grid">
+          <label class="field">CTR (%)<input type="number" id="ads-ctr" step="0.01" min="0" placeholder="مثلاً 1.4"/></label>
+          <label class="field">CPC ($)<input type="number" id="ads-cpc" step="0.001" min="0" placeholder="مثلاً 0.18"/></label>
+          <label class="field">CPM ($)<input type="number" id="ads-cpm" step="0.01" min="0" placeholder="مثلاً 8.5"/></label>
+          <label class="field">Hook rate (%)<input type="number" id="ads-hook" step="0.1" min="0" placeholder="3s plays ÷ imps"/></label>
+          <label class="field">Hold rate (%)<input type="number" id="ads-hold" step="0.1" min="0" placeholder="اختياري"/></label>
+          <label class="field">Frequency<input type="number" id="ads-freq" step="0.01" min="0" placeholder="مثلاً 1.8"/></label>
+          <label class="field">Clicks<input type="number" id="ads-clicks" step="1" min="0" placeholder=""/></label>
+          <label class="field">Impressions<input type="number" id="ads-imps" step="1" min="0" placeholder=""/></label>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
-          <button type="button" class="primary" id="ads-analyze-btn">حلّل دابا</button>
-          <button type="button" class="ghost" id="ads-save-btn">حلّل + احفظ فالسجل</button>
+          <button type="button" class="primary" id="ads-analyze-btn">حلّل — Winner ولا Kill؟</button>
+          <button type="button" class="ghost" id="ads-save-btn">حلّل + احفظ</button>
         </div>
         <p id="ads-form-msg" style="margin:10px 0 0;font-size:.82rem;color:var(--muted);"></p>
       </div>
@@ -621,25 +648,26 @@
       </div>
 
       <div class="calc-block" style="margin-top:8px;">
-        <h4>سجل التشغيلات المحفوظة</h4>
-        <p class="hint">آخر التحليلات اللي حفظتيهم — باش تقارني الأسابيع والكامباينز.</p>
+        <h4>سجل الإعلانات المختبَرة</h4>
+        <p class="hint">باش تقارني creatives: شكون Winner و شكون Kill.</p>
         <div class="table-wrap">
           <table class="data">
             <thead>
               <tr>
                 <th>التاريخ</th>
-                <th>الاسم</th>
-                <th>صرف</th>
-                <th>Leads</th>
-                <th>CPL</th>
-                <th>ROAS</th>
-                <th>ربح</th>
+                <th>الإعلان</th>
+                <th>نقطة</th>
+                <th>CTR</th>
+                <th>CPC $</th>
+                <th>CPM $</th>
+                <th>Hook</th>
+                <th>Spend $</th>
                 <th>الحكم</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="ads-logs-body">
-              <tr><td colspan="9" style="color:var(--muted);">Loading…</td></tr>
+              <tr><td colspan="10" style="color:var(--muted);">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1165,29 +1193,34 @@
       const tone = v.tone === 'ok' ? 'ok' : (v.tone === 'bad' ? 'bad' : 'warn');
       box.className = 'ads-verdict ' + tone;
       box.style.display = 'block';
+      const resume = (v.resume_ar || []).map((t) => `<p>${String(t)}</p>`).join('');
+      const actions = (v.actions_ar || []).map((t) => `<li>${String(t)}</li>`).join('');
       const tips = (v.tips_ar || []).map((t) => `<li>${String(t)}</li>`).join('');
       box.innerHTML = `
-        <p class="v-label">الحكم</p>
+        <p class="v-label">الحكم على الإعلان</p>
         <h3 class="v-title">${v.label_ar || '—'}</h3>
         <p class="v-summary">${v.summary_ar || ''}</p>
-        <ul class="ads-tips">${tips}</ul>
+        ${resume ? `<div class="ads-resume">${resume}</div>` : ''}
+        ${actions ? `<p class="ads-actions-title">شنو ندير</p><ul class="ads-tips actions">${actions}</ul>` : ''}
+        ${tips ? `<p class="ads-tips-title">ملاحظات</p><ul class="ads-tips">${tips}</ul>` : ''}
       `;
       const grid = document.getElementById('ads-metrics-grid');
       const wrap = document.getElementById('ads-metrics-wrap');
+      const scoreCls = (m.score || 0) >= 72 ? 'pos' : ((m.score || 0) < 55 ? 'neg' : '');
       const cells = [
-        ['صرف الإعلانات', m.ad_spend_sar, 'ر.س', ''],
-        ['إيراد', m.revenue_sar, 'ر.س', ''],
-        ['ربح صافي', m.profit_sar, 'ر.س', (m.profit_sar || 0) >= 0 ? 'pos' : 'neg'],
-        ['ROAS', m.roas, '×', (m.roas || 0) >= 1.5 ? 'pos' : ((m.roas || 0) < 1 ? 'neg' : '')],
-        ['CPL', m.cpl_sar, 'ر.س', ''],
-        ['حد CPL التعادل', m.max_cpl_sar, 'ر.س', ''],
-        ['CPA مؤكد', m.cpa_confirmed_sar, 'ر.س', ''],
-        ['CPA مسلَّم', m.cpa_delivered_sar, 'ر.س', ''],
-        ['هامش', m.margin_pct, '%', (m.margin_pct || 0) >= 0 ? 'pos' : 'neg'],
-        ['تكلفة كلية', m.total_cost_sar, 'ر.س', ''],
+        ['النقطة', m.score, '/100', scoreCls],
+        ['CTR', m.ctr_pct, '%', ''],
+        ['CPC', m.cpc_usd, '$', ''],
+        ['CPM', m.cpm_usd, '$', ''],
+        ['Hook rate', m.hook_rate_pct, '%', ''],
+        ['Hold rate', m.hold_rate_pct, '%', ''],
+        ['Frequency', m.frequency, '', ''],
+        ['Spend', m.ad_spend_usd || m.spend_usd, '$', ''],
+        ['CPL', m.cpl_usd, '$', ''],
+        ['أيام', m.days, '', ''],
       ];
       grid.innerHTML = cells.map(([k, val, unit, cls]) => {
-        const show = val == null ? '—' : `${Number(val).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit}`;
+        const show = val == null || val === '' ? '—' : `${Number(val).toLocaleString('en-US', { maximumFractionDigits: 3 })}${unit ? ' ' + unit : ''}`;
         return `<div class="ads-kpi"><div class="k">${k}</div><div class="v ${cls}">${show}</div></div>`;
       }).join('');
       wrap.style.display = 'block';
@@ -1196,7 +1229,7 @@
     function renderAdsLogs(logs) {
       const body = document.getElementById('ads-logs-body');
       if (!logs || !logs.length) {
-        body.innerHTML = '<tr><td colspan="9" style="color:var(--muted);">ما كاين حتى تشغيل محفوظ بعد.</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" style="color:var(--muted);">ما كاين حتى إعلان محفوظ بعد.</td></tr>';
         return;
       }
       body.innerHTML = logs.map((row) => {
@@ -1204,14 +1237,16 @@
         const v = row.verdict || {};
         const when = (row.created_at || '').slice(0, 10);
         const tone = v.tone === 'ok' ? 'ok' : (v.tone === 'bad' ? 'bad' : '');
+        const spend = m.ad_spend_usd ?? m.spend_usd ?? row.spend_usd ?? '—';
         return `<tr>
           <td>${when || '—'}</td>
           <td>${row.name || '—'} <span style="color:var(--muted);font-size:.75rem;">${row.platform || ''}</span></td>
-          <td>${m.ad_spend_sar ?? row.spend_sar ?? '—'}</td>
-          <td>${row.leads ?? '—'}</td>
-          <td>${m.cpl_sar ?? '—'}</td>
-          <td>${m.roas ?? '—'}</td>
-          <td class="${(m.profit_sar||0)>=0?'':'neg'}" style="${(m.profit_sar||0)<0?'color:var(--danger)':''}">${m.profit_sar ?? '—'}</td>
+          <td><strong>${m.score ?? '—'}</strong></td>
+          <td>${m.ctr_pct ?? '—'}</td>
+          <td>${m.cpc_usd ?? '—'}</td>
+          <td>${m.cpm_usd ?? '—'}</td>
+          <td>${m.hook_rate_pct ?? '—'}</td>
+          <td>${spend}</td>
           <td><span class="pill ${tone}">${v.label_ar || '—'}</span></td>
           <td><button type="button" class="ghost" data-ads-del="${row.id}" style="padding:6px 10px;font-size:.75rem;">حذف</button></td>
         </tr>`;
@@ -1219,7 +1254,7 @@
       body.querySelectorAll('[data-ads-del]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-ads-del');
-          if (!id || !window.confirm('تحذف هاد التشغيل من السجل؟')) return;
+          if (!id || !window.confirm('تحذف هاد الإعلان من السجل؟')) return;
           const r = await api('/api/admin/data/ads-lab/delete', {
             method: 'POST',
             body: JSON.stringify({ id }),
@@ -1258,28 +1293,37 @@
 
     async function runAdsAnalyze(save) {
       const msg = document.getElementById('ads-form-msg');
-      const spend = adsNum('ads-spend');
-      const leads = adsInt('ads-leads');
-      if (spend == null || leads == null) {
-        msg.textContent = 'صرف الإعلانات وعدد الـ leads مطلوبين.';
-        msg.style.color = 'var(--danger)';
-        return;
-      }
-      msg.textContent = save ? 'كيحلّل ويحفظ…' : 'كيحلّل…';
-      msg.style.color = 'var(--muted)';
       const payload = {
         name: document.getElementById('ads-name').value.trim(),
         platform: document.getElementById('ads-platform').value,
-        spend_sar: spend,
-        leads: leads,
-        confirmed: adsInt('ads-confirmed'),
-        delivered: adsInt('ads-delivered'),
-        revenue_sar: adsNum('ads-revenue'),
+        spend_usd: adsNum('ads-spend'),
+        leads: adsInt('ads-leads'),
+        days: adsInt('ads-days'),
+        cpc_usd: adsNum('ads-cpc'),
+        cpm_usd: adsNum('ads-cpm'),
+        ctr_pct: adsNum('ads-ctr'),
+        hook_rate_pct: adsNum('ads-hook'),
+        hold_rate_pct: adsNum('ads-hold'),
+        frequency: adsNum('ads-freq'),
+        clicks: adsInt('ads-clicks'),
+        impressions: adsInt('ads-imps'),
         day_start: document.getElementById('ads-day-start').value || null,
         day_end: document.getElementById('ads-day-end').value || null,
         notes: document.getElementById('ads-notes').value.trim() || null,
         save: !!save,
       };
+      const hasMetric = [
+        payload.spend_usd, payload.cpc_usd, payload.cpm_usd, payload.ctr_pct,
+        payload.hook_rate_pct, payload.hold_rate_pct, payload.frequency,
+        payload.clicks, payload.impressions, payload.leads,
+      ].some((x) => x != null);
+      if (!hasMetric) {
+        msg.textContent = 'دخل شي metric على الأقل (CTR / CPC / CPM / Hook…).';
+        msg.style.color = 'var(--danger)';
+        return;
+      }
+      msg.textContent = save ? 'كيحلّل ويحفظ…' : 'كيحلّل…';
+      msg.style.color = 'var(--muted)';
       const r = await api('/api/admin/data/ads-lab/analyze', {
         method: 'POST',
         body: JSON.stringify(payload),

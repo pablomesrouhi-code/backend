@@ -788,11 +788,17 @@ def admin_put_store_settings(
 class AdsLabAnalyzeBody(BaseModel):
     name: str = Field(default="", max_length=120)
     platform: str = Field(default="meta", max_length=40)
-    spend_sar: float = Field(..., ge=0, le=10_000_000)
-    leads: int = Field(..., ge=0, le=10_000_000)
-    confirmed: int | None = Field(default=None, ge=0, le=10_000_000)
-    delivered: int | None = Field(default=None, ge=0, le=10_000_000)
-    revenue_sar: float | None = Field(default=None, ge=0, le=100_000_000)
+    spend_usd: float | None = Field(default=None, ge=0, le=10_000_000)
+    leads: int | None = Field(default=None, ge=0, le=10_000_000)
+    days: int | None = Field(default=None, ge=1, le=366)
+    clicks: int | None = Field(default=None, ge=0, le=100_000_000)
+    impressions: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    cpc_usd: float | None = Field(default=None, ge=0, le=1000)
+    cpm_usd: float | None = Field(default=None, ge=0, le=10000)
+    ctr_pct: float | None = Field(default=None, ge=0, le=100)
+    hook_rate_pct: float | None = Field(default=None, ge=0, le=100)
+    hold_rate_pct: float | None = Field(default=None, ge=0, le=100)
+    frequency: float | None = Field(default=None, ge=0, le=100)
     day_start: str | None = Field(default=None, max_length=32)
     day_end: str | None = Field(default=None, max_length=32)
     notes: str | None = Field(default=None, max_length=500)
@@ -804,20 +810,12 @@ def admin_ads_lab_list(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin_user),
 ) -> dict[str, Any]:
-    cfg = get_store_config(db)
-    pd = cfg.get("profit_defaults") or {}
     return {
         "logs": list_ad_logs(db),
-        "defaults": {
-            "confirmation_pct": pd.get("confirmation_pct", 50),
-            "delivery_pct": pd.get("delivery_pct", 70),
-            "product_cost_usd": pd.get("product_cost_usd", 0),
-            "avg_main_pieces": pd.get("avg_main_pieces", 1),
-            "sar_per_usd": cfg.get("sar_per_usd", 3.75),
-        },
+        "defaults": {},
         "notes": (
-            "دخل صرف الإعلانات + الـ leads (والإيراد/التأكيد اختياري). "
-            "التحليل كيحسب CPL و ROAS والربح الصافي مع رسوم COD و COGS من الإعدادات."
+            "دخل metrics من Ads Manager: CPC · CTR · CPM · Hook rate · Frequency · Spend. "
+            "التحليل كيقول ليك: Winner (خلّيه) · Keep testing · ولا Kill."
         ),
     }
 
@@ -828,15 +826,40 @@ def admin_ads_lab_analyze(
     db: Session = Depends(get_db),
     _: str = Depends(require_admin_user),
 ) -> dict[str, Any]:
+    has_metric = any(
+        v is not None
+        for v in (
+            body.spend_usd,
+            body.cpc_usd,
+            body.cpm_usd,
+            body.ctr_pct,
+            body.hook_rate_pct,
+            body.hold_rate_pct,
+            body.frequency,
+            body.clicks,
+            body.impressions,
+            body.leads,
+        )
+    )
+    if not has_metric:
+        raise HTTPException(status_code=400, detail="enter at least one ad metric")
     analysis = analyze_ad_run(
         db,
-        spend_sar=body.spend_sar,
+        spend_usd=body.spend_usd,
         leads=body.leads,
-        confirmed=body.confirmed,
-        delivered=body.delivered,
-        revenue_sar=body.revenue_sar,
+        days=body.days,
+        clicks=body.clicks,
+        impressions=body.impressions,
+        cpc_usd=body.cpc_usd,
+        cpm_usd=body.cpm_usd,
+        ctr_pct=body.ctr_pct,
+        hook_rate_pct=body.hook_rate_pct,
+        hold_rate_pct=body.hold_rate_pct,
+        frequency=body.frequency,
         name=body.name,
         platform=body.platform,
+        day_start=body.day_start,
+        day_end=body.day_end,
     )
     saved_row = None
     if body.save:
