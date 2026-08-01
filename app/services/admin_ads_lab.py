@@ -57,7 +57,9 @@ def analyze_ad_run(
     del_pct = max(0.0, min(100.0, _f(pd.get("delivery_pct"), 70.0)))
     product_cost_usd = max(0.0, _f(pd.get("product_cost_usd"), 0.0))
     avg_pieces = max(0.0, _f(pd.get("avg_main_pieces"), 1.0))
-    aov_hint = _f((cfg.get("bundle_prices_sar") or {}).get("1"), catalog_unit_price_sar())
+    unit_prices = catalog_selling_prices_sar()
+    fallback_unit = _f(unit_prices.get(1), 199.0)
+    aov_hint = _f((cfg.get("bundle_prices_sar") or {}).get("1"), fallback_unit)
     # Prefer realized AOV from economics if available in defaults attach — use catalog AOV estimate
     upsell = _f(cfg.get("upsell_price_sar"), 99)
     attach = max(0.0, min(1.0, _f(pd.get("upsell_attach_pct"), 0.0) / 100.0))
