@@ -296,6 +296,55 @@
     }
     .calc-status.ok { background: rgba(45, 157, 120, 0.15); color: var(--accent-mint); }
     .calc-status.bad { background: rgba(199, 62, 77, 0.12); color: var(--danger); }
+    .ads-verdict {
+      border-radius: 18px; padding: 22px 20px; margin-bottom: 18px;
+      border: 1px solid var(--border);
+      background: linear-gradient(145deg, #fff 0%, #f7f4f2 100%);
+      box-shadow: var(--shadow-sm);
+    }
+    .ads-verdict.ok {
+      border-color: rgba(45, 157, 120, 0.45);
+      background: linear-gradient(145deg, rgba(45,157,120,.12), #fff 55%);
+    }
+    .ads-verdict.bad {
+      border-color: rgba(199, 62, 77, 0.4);
+      background: linear-gradient(145deg, rgba(199,62,77,.1), #fff 55%);
+    }
+    .ads-verdict.warn {
+      border-color: rgba(184, 120, 40, 0.4);
+      background: linear-gradient(145deg, rgba(230,180,80,.14), #fff 55%);
+    }
+    .ads-verdict .v-label {
+      font-size: .78rem; font-weight: 800; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--muted); margin: 0 0 6px;
+    }
+    .ads-verdict .v-title {
+      margin: 0; font-size: 1.85rem; font-weight: 900; line-height: 1.2;
+    }
+    .ads-verdict.ok .v-title { color: var(--accent-mint); }
+    .ads-verdict.bad .v-title { color: var(--danger); }
+    .ads-verdict.warn .v-title { color: #b87828; }
+    .ads-verdict .v-summary {
+      margin: 10px 0 0; font-size: .95rem; line-height: 1.55; color: var(--text);
+    }
+    .ads-tips { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .ads-tips li {
+      padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
+      background: #fff; font-size: .84rem; line-height: 1.45; color: var(--text);
+    }
+    .ads-tips li::before { content: "→ "; color: var(--authority); font-weight: 800; }
+    .ads-kpi-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px; margin: 16px 0 4px;
+    }
+    .ads-kpi {
+      padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+      background: #fff;
+    }
+    .ads-kpi .k { font-size: .72rem; color: var(--muted); font-weight: 700; }
+    .ads-kpi .v { font-size: 1.15rem; font-weight: 900; margin-top: 4px; color: var(--authority); }
+    .ads-kpi .v.neg { color: var(--danger); }
+    .ads-kpi .v.pos { color: var(--accent-mint); }
     @media (max-width: 520px) {
       .kpi .value { font-size: 1.28rem; }
     }
@@ -341,6 +390,7 @@
           <button type="button" id="tab-overview" class="active">نظرة عامة</button>
           <button type="button" id="tab-orders">الطلبات <span class="pill ok" id="orders-live-badge" style="display:none;margin-inline-start:6px;font-size:.72rem;">0</span></button>
           <button type="button" id="tab-profit">Profit calculator</button>
+          <button type="button" id="tab-ads">مختبر الإعلانات</button>
           <button type="button" id="tab-settings">إعدادات المتجر</button>
           <button type="button" id="tab-capi">CAPI logs</button>
         </div>
@@ -382,12 +432,12 @@
         <div class="kpi">
           <div class="label">متوسط قيمة الطلب (AOV)</div>
           <div class="value" id="kpi-aov">—</div>
-          <div class="hint">إجمالي الطلب ÷ العدد — يطابق سعر البيع × القطع + Upsell.</div>
+          <div class="hint">إجمالي الطلب ÷ العدد (total_sar — يشمل Upsell).</div>
         </div>
         <div class="kpi">
-          <div class="label">سعر البيع / قطعة</div>
+          <div class="label">سعر البيع / علبة واحدة</div>
           <div class="value" id="kpi-sell">—</div>
-          <div class="hint">مجموع subtotal ÷ قطع المنتج (بدون Upsell).</div>
+          <div class="hint" id="kpi-sell-hint">من إعدادات المتجر (علبة واحدة = 199 ر.س).</div>
         </div>
         <div class="kpi">
           <div class="label">متوسط القطع / طلب</div>
@@ -487,14 +537,14 @@
       <div class="calc-fees" id="pc-fees-row" aria-label="Fixed ops fees"></div>
       <div class="calc-block">
         <h4>Revenue &amp; product (selling price aligned)</h4>
-        <p class="hint">Selling price = weighted subtotal ÷ main pieces. AOV ومتوسط القطع مرتبطين — بدّلي واحد والباقي يتحدّث تلقائياً. «تحديث من الطلبات» يملأ القيم من Store.</p>
+        <p class="hint">سعر البيع = سعر علبة واحدة من الإعدادات (199 ر.س). AOV ومتوسط القطع من الطلبات الفعلية — ما كيتقسموش على بعض.</p>
         <div class="calc-grid">
         <label class="field">SAR per 1 USD<input type="number" id="pc-sar-usd" step="0.01" min="0.01" value="3.75"/></label>
         <label class="field">AOV (SAR)<input type="number" id="pc-aov-sar" step="0.01" min="0"/></label>
         <label class="field">AOV (USD)<input type="number" id="pc-aov-usd" step="0.01" min="0"/></label>
         <label class="field">Avg main pieces / order<input type="number" id="pc-avg-pieces" step="0.01" min="0"/></label>
         <label class="field">Selling price / piece (USD)<input type="number" id="pc-selling-price" step="0.01" min="0"/></label>
-        <label class="field">Selling price / piece (SAR)<input type="number" id="pc-selling-price-sar" step="0.01" min="0"/></label>
+        <label class="field">Selling price / piece (SAR)<input type="number" id="pc-selling-price-sar" step="0.01" min="0" title="Catalog price for 1 unit (e.g. 199)"/></label>
         <label class="field">Product cost / piece (USD)<input type="number" id="pc-product-cost" step="0.01" min="0" value="0"/></label>
         </div>
       </div>
@@ -527,6 +577,74 @@
         COGS = confirmed × avg main pieces × product cost. COD fees: confirmation + delivery + return + warehouse (USD, env <code>COD_FEE_CONFIRMATION_USD</code>, <code>COD_FEE_DELIVERY_USD</code>, <code>COD_FEE_RETURN_USD</code>, <code>COD_FEE_WAREHOUSE_USD</code>).
         Configure <code>SAR_PER_USD</code> for FX.
       </footer>
+    </div>
+
+    <div class="panel" id="ads-panel" style="display:none;margin-top:16px;">
+      <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">مختبر الإعلانات — ربح ولا خسارة؟</p>
+      <p style="font-size:.86rem;color:var(--muted);margin:0 0 14px;line-height:1.55;">
+        دخل <strong>صرف الإعلان</strong> + <strong>الـ leads</strong> اللي جاب. الإيراد والتأكيد والتسليم اختياريين —
+        إلا خليتهم فاضيين كنقدّروهم من إعدادات المتجر (AOV · تأكيد · تسليم · COD · COGS).
+      </p>
+
+      <div id="ads-verdict-box" class="ads-verdict" style="display:none;"></div>
+
+      <div class="calc-block">
+        <h4>فورم التشغيل (Meta / TikTok / …)</h4>
+        <div class="calc-grid">
+          <label class="field">اسم التشغيل / الكامباين<input type="text" id="ads-name" placeholder="مثلاً: Scale Rawnaq UGC"/></label>
+          <label class="field">المنصة
+            <select id="ads-platform" style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fdfcfc;">
+              <option value="meta">Meta</option>
+              <option value="tiktok">TikTok</option>
+              <option value="snap">Snap</option>
+              <option value="other">أخرى</option>
+            </select>
+          </label>
+          <label class="field">من يوم<input type="date" id="ads-day-start"/></label>
+          <label class="field">إلى يوم<input type="date" id="ads-day-end"/></label>
+          <label class="field">صرف الإعلانات (ر.س) *<input type="number" id="ads-spend" step="0.01" min="0" placeholder="مثلاً 1500"/></label>
+          <label class="field">Leads اللي جاب *<input type="number" id="ads-leads" step="1" min="0" placeholder="مثلاً 120"/></label>
+          <label class="field">مؤكَّدين (اختياري)<input type="number" id="ads-confirmed" step="1" min="0" placeholder="فارغ = تقدير %"/></label>
+          <label class="field">مُسلَّمين (اختياري)<input type="number" id="ads-delivered" step="1" min="0" placeholder="فارغ = تقدير %"/></label>
+          <label class="field">إيراد حقيقي ر.س (اختياري)<input type="number" id="ads-revenue" step="0.01" min="0" placeholder="فارغ = AOV × مسلَّم"/></label>
+          <label class="field">ملاحظات<input type="text" id="ads-notes" placeholder="hooks، audience…"/></label>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <button type="button" class="primary" id="ads-analyze-btn">حلّل دابا</button>
+          <button type="button" class="ghost" id="ads-save-btn">حلّل + احفظ فالسجل</button>
+        </div>
+        <p id="ads-form-msg" style="margin:10px 0 0;font-size:.82rem;color:var(--muted);"></p>
+      </div>
+
+      <div id="ads-metrics-wrap" style="display:none;">
+        <div class="ads-kpi-grid" id="ads-metrics-grid"></div>
+      </div>
+
+      <div class="calc-block" style="margin-top:8px;">
+        <h4>سجل التشغيلات المحفوظة</h4>
+        <p class="hint">آخر التحليلات اللي حفظتيهم — باش تقارني الأسابيع والكامباينز.</p>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>التاريخ</th>
+                <th>الاسم</th>
+                <th>صرف</th>
+                <th>Leads</th>
+                <th>CPL</th>
+                <th>ROAS</th>
+                <th>ربح</th>
+                <th>الحكم</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ads-logs-body">
+              <tr><td colspan="9" style="color:var(--muted);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <footer class="note" id="ads-note" style="margin-top:12px;"></footer>
     </div>
 
     <div class="panel" id="settings-panel" style="display:none;margin-top:16px;">
@@ -772,6 +890,12 @@
           ? fmtDec(j.selling_price_per_piece_sar, 2) + ' ر.س'
           : '—';
       }
+      const sellHint = document.getElementById('kpi-sell-hint');
+      if (sellHint && j.realized_avg_per_piece_sar) {
+        sellHint.textContent =
+          'سعر علبة واحدة من الإعدادات. متوسط محقّق (بعد العروض): '
+          + fmtDec(j.realized_avg_per_piece_sar, 2) + ' ر.س/علبة';
+      }
       const piecesEl = document.getElementById('kpi-pieces');
       if (piecesEl) {
         piecesEl.textContent = j.avg_main_pieces_per_order
@@ -999,6 +1123,7 @@
         overview: 'overview-panel',
         orders: 'orders-panel',
         profit: 'profit-panel',
+        ads: 'ads-panel',
         settings: 'settings-panel',
         capi: 'capi-panel',
       };
@@ -1006,6 +1131,7 @@
         overview: 'tab-overview',
         orders: 'tab-orders',
         profit: 'tab-profit',
+        ads: 'tab-ads',
         settings: 'tab-settings',
         capi: 'tab-capi',
       };
@@ -1017,6 +1143,157 @@
       }
       if (name === 'orders') startOrdersPoll();
       else stopOrdersPoll();
+      if (name === 'ads') void loadAdsLab();
+    }
+
+    function adsNum(id) {
+      const el = document.getElementById(id);
+      if (!el || el.value === '' || el.value == null) return null;
+      const v = parseFloat(el.value);
+      return Number.isFinite(v) ? v : null;
+    }
+
+    function adsInt(id) {
+      const n = adsNum(id);
+      return n == null ? null : Math.max(0, Math.round(n));
+    }
+
+    function renderAdsAnalysis(a) {
+      const box = document.getElementById('ads-verdict-box');
+      const v = a.verdict || {};
+      const m = a.metrics || {};
+      const tone = v.tone === 'ok' ? 'ok' : (v.tone === 'bad' ? 'bad' : 'warn');
+      box.className = 'ads-verdict ' + tone;
+      box.style.display = 'block';
+      const tips = (v.tips_ar || []).map((t) => `<li>${String(t)}</li>`).join('');
+      box.innerHTML = `
+        <p class="v-label">الحكم</p>
+        <h3 class="v-title">${v.label_ar || '—'}</h3>
+        <p class="v-summary">${v.summary_ar || ''}</p>
+        <ul class="ads-tips">${tips}</ul>
+      `;
+      const grid = document.getElementById('ads-metrics-grid');
+      const wrap = document.getElementById('ads-metrics-wrap');
+      const cells = [
+        ['صرف الإعلانات', m.ad_spend_sar, 'ر.س', ''],
+        ['إيراد', m.revenue_sar, 'ر.س', ''],
+        ['ربح صافي', m.profit_sar, 'ر.س', (m.profit_sar || 0) >= 0 ? 'pos' : 'neg'],
+        ['ROAS', m.roas, '×', (m.roas || 0) >= 1.5 ? 'pos' : ((m.roas || 0) < 1 ? 'neg' : '')],
+        ['CPL', m.cpl_sar, 'ر.س', ''],
+        ['حد CPL التعادل', m.max_cpl_sar, 'ر.س', ''],
+        ['CPA مؤكد', m.cpa_confirmed_sar, 'ر.س', ''],
+        ['CPA مسلَّم', m.cpa_delivered_sar, 'ر.س', ''],
+        ['هامش', m.margin_pct, '%', (m.margin_pct || 0) >= 0 ? 'pos' : 'neg'],
+        ['تكلفة كلية', m.total_cost_sar, 'ر.س', ''],
+      ];
+      grid.innerHTML = cells.map(([k, val, unit, cls]) => {
+        const show = val == null ? '—' : `${Number(val).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit}`;
+        return `<div class="ads-kpi"><div class="k">${k}</div><div class="v ${cls}">${show}</div></div>`;
+      }).join('');
+      wrap.style.display = 'block';
+    }
+
+    function renderAdsLogs(logs) {
+      const body = document.getElementById('ads-logs-body');
+      if (!logs || !logs.length) {
+        body.innerHTML = '<tr><td colspan="9" style="color:var(--muted);">ما كاين حتى تشغيل محفوظ بعد.</td></tr>';
+        return;
+      }
+      body.innerHTML = logs.map((row) => {
+        const m = row.metrics || {};
+        const v = row.verdict || {};
+        const when = (row.created_at || '').slice(0, 10);
+        const tone = v.tone === 'ok' ? 'ok' : (v.tone === 'bad' ? 'bad' : '');
+        return `<tr>
+          <td>${when || '—'}</td>
+          <td>${row.name || '—'} <span style="color:var(--muted);font-size:.75rem;">${row.platform || ''}</span></td>
+          <td>${m.ad_spend_sar ?? row.spend_sar ?? '—'}</td>
+          <td>${row.leads ?? '—'}</td>
+          <td>${m.cpl_sar ?? '—'}</td>
+          <td>${m.roas ?? '—'}</td>
+          <td class="${(m.profit_sar||0)>=0?'':'neg'}" style="${(m.profit_sar||0)<0?'color:var(--danger)':''}">${m.profit_sar ?? '—'}</td>
+          <td><span class="pill ${tone}">${v.label_ar || '—'}</span></td>
+          <td><button type="button" class="ghost" data-ads-del="${row.id}" style="padding:6px 10px;font-size:.75rem;">حذف</button></td>
+        </tr>`;
+      }).join('');
+      body.querySelectorAll('[data-ads-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-ads-del');
+          if (!id || !window.confirm('تحذف هاد التشغيل من السجل؟')) return;
+          const r = await api('/api/admin/data/ads-lab/delete', {
+            method: 'POST',
+            body: JSON.stringify({ id }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            document.getElementById('ads-form-msg').textContent = 'فشل الحذف';
+            return;
+          }
+          renderAdsLogs(j.logs || []);
+        });
+      });
+    }
+
+    async function loadAdsLab() {
+      const note = document.getElementById('ads-note');
+      try {
+        const r = await api('/api/admin/data/ads-lab');
+        const j = await r.json();
+        if (!r.ok) {
+          note.textContent = 'تعذّر تحميل مختبر الإعلانات';
+          return;
+        }
+        note.textContent = j.notes || '';
+        renderAdsLogs(j.logs || []);
+        const t = todayISO();
+        const weekAgo = daysAgoISO(7);
+        const ds = document.getElementById('ads-day-start');
+        const de = document.getElementById('ads-day-end');
+        if (ds && !ds.value) ds.value = weekAgo;
+        if (de && !de.value) de.value = t;
+      } catch (e) {
+        note.textContent = 'خطأ تحميل مختبر الإعلانات';
+      }
+    }
+
+    async function runAdsAnalyze(save) {
+      const msg = document.getElementById('ads-form-msg');
+      const spend = adsNum('ads-spend');
+      const leads = adsInt('ads-leads');
+      if (spend == null || leads == null) {
+        msg.textContent = 'صرف الإعلانات وعدد الـ leads مطلوبين.';
+        msg.style.color = 'var(--danger)';
+        return;
+      }
+      msg.textContent = save ? 'كيحلّل ويحفظ…' : 'كيحلّل…';
+      msg.style.color = 'var(--muted)';
+      const payload = {
+        name: document.getElementById('ads-name').value.trim(),
+        platform: document.getElementById('ads-platform').value,
+        spend_sar: spend,
+        leads: leads,
+        confirmed: adsInt('ads-confirmed'),
+        delivered: adsInt('ads-delivered'),
+        revenue_sar: adsNum('ads-revenue'),
+        day_start: document.getElementById('ads-day-start').value || null,
+        day_end: document.getElementById('ads-day-end').value || null,
+        notes: document.getElementById('ads-notes').value.trim() || null,
+        save: !!save,
+      };
+      const r = await api('/api/admin/data/ads-lab/analyze', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        msg.textContent = 'فشل التحليل: ' + (j.detail || r.status);
+        msg.style.color = 'var(--danger)';
+        return;
+      }
+      renderAdsAnalysis(j.analysis || {});
+      msg.textContent = save ? 'تحلّل وتحفظ فالسجل ✓' : 'تحليل جاهز — تقدري تحفظيه بالزر الثاني';
+      msg.style.color = 'var(--accent-mint)';
+      if (save) void loadAdsLab();
     }
 
     function pcNum(id) {
@@ -1066,7 +1343,9 @@
     function pcOrderValueUsd() {
       const v = pcNum('pc-aov-usd');
       if (v > 0) return v;
-      return pcComputeAovUsdFromAvg(pcNum('pc-avg-pieces'));
+      const rate = pcNum('pc-sar-usd');
+      const sar = pcNum('pc-aov-sar');
+      return rate > 0 && sar > 0 ? sar / rate : 0;
     }
 
     function pcOrderValueSar() {
@@ -1081,40 +1360,23 @@
       if (pcSyncLock) return;
       pcSyncLock = true;
       const rate = pcNum('pc-sar-usd');
-      const selling = pcGetSellingUsd();
-      const upsellPart = pcUpsellUsdPart();
 
-      if (changed === 'avg') {
-        const avg = pcNum('pc-avg-pieces');
-        const aovUsd = pcComputeAovUsdFromAvg(avg);
-        document.getElementById('pc-aov-usd').value = aovUsd > 0 ? aovUsd.toFixed(2) : '';
-        document.getElementById('pc-aov-sar').value =
-          rate > 0 && aovUsd > 0 ? (aovUsd * rate).toFixed(2) : '';
-      } else if (changed === 'aov-usd') {
+      if (changed === 'aov-usd') {
         const aovUsd = pcNum('pc-aov-usd');
         document.getElementById('pc-aov-sar').value =
           rate > 0 && aovUsd > 0 ? (aovUsd * rate).toFixed(2) : '';
-        const avg = pcComputeAvgFromAovUsd(aovUsd);
-        if (avg > 0) document.getElementById('pc-avg-pieces').value = avg.toFixed(3);
       } else if (changed === 'aov-sar') {
         const aovSar = pcNum('pc-aov-sar');
         const aovUsd = rate > 0 && aovSar > 0 ? aovSar / rate : 0;
         document.getElementById('pc-aov-usd').value = aovUsd > 0 ? aovUsd.toFixed(2) : '';
-        const avg = pcComputeAvgFromAovUsd(aovUsd);
-        if (avg > 0) document.getElementById('pc-avg-pieces').value = avg.toFixed(3);
-      } else if (changed === 'selling' || changed === 'rate') {
-        const avg = pcNum('pc-avg-pieces');
-        if (avg > 0 && selling > 0) {
-          const aovUsd = avg * selling + upsellPart;
-          document.getElementById('pc-aov-usd').value = aovUsd.toFixed(2);
-          document.getElementById('pc-aov-sar').value =
-            rate > 0 ? (aovUsd * rate).toFixed(2) : '';
-        } else if (pcNum('pc-aov-sar') > 0 && rate > 0) {
-          const aovUsd = pcNum('pc-aov-sar') / rate;
-          document.getElementById('pc-aov-usd').value = aovUsd.toFixed(2);
-          const avg2 = pcComputeAvgFromAovUsd(aovUsd);
-          if (avg2 > 0) document.getElementById('pc-avg-pieces').value = avg2.toFixed(3);
+      } else if (changed === 'rate') {
+        const aovUsd = pcNum('pc-aov-usd');
+        if (aovUsd > 0) {
+          document.getElementById('pc-aov-sar').value = (aovUsd * rate).toFixed(2);
         }
+        syncSellingSarFromUsd();
+      } else if (changed === 'selling') {
+        syncSellingSarFromUsd();
       }
       pcSyncLock = false;
     }
@@ -1378,7 +1640,6 @@
       document.getElementById('pc-avg-pieces').value = document.getElementById('st-pd-pieces').value;
       document.getElementById('pc-sar-usd').value = document.getElementById('st-sar-usd').value;
       pcUpsellPriceSar = pcNum('st-upsell') || 99;
-      pcSyncStoreMetrics('avg');
       runAll();
     }
 
@@ -1439,6 +1700,9 @@
       if (pe && !pe.value) pe.value = document.getElementById('end-date').value;
       void loadProfitBaseline();
     });
+    document.getElementById('tab-ads').addEventListener('click', () => showAdminTab('ads'));
+    document.getElementById('ads-analyze-btn').addEventListener('click', () => void runAdsAnalyze(false));
+    document.getElementById('ads-save-btn').addEventListener('click', () => void runAdsAnalyze(true));
     document.getElementById('tab-settings').addEventListener('click', () => {
       showAdminTab('settings');
       void loadStoreSettings();
@@ -1473,7 +1737,6 @@
       runAll();
     });
     document.getElementById('pc-avg-pieces').addEventListener('input', () => {
-      pcSyncStoreMetrics('avg');
       runAll();
     });
     document.getElementById('pc-selling-price').addEventListener('input', () => {

@@ -21,6 +21,7 @@ from app.admin_session import mint_admin_token, verify_admin_token
 from app.deps import get_db
 from app.models.analytics_models import AnalyticsEvent
 from app.models.order_models import Order, OrderItem, TrackingEvent
+from app.services.admin_ads_lab import analyze_ad_run, delete_ad_log, list_ad_logs, save_ad_log
 from app.services.admin_economics import compute_store_economics, sar_per_usd
 from app.services.cod_network import mark_order_cod_delivery, resend_persisted_order_to_cod_network
 from app.services.store_settings import get_store_config, save_store_config
@@ -343,6 +344,7 @@ def admin_metrics(
         "upsell_per_order_sar": economics["upsell_per_order_sar"],
         "selling_price_per_piece_sar": economics["selling_price_per_piece_sar"],
         "selling_price_per_piece_usd": economics["selling_price_per_piece_usd"],
+        "realized_avg_per_piece_sar": economics.get("realized_avg_per_piece_sar"),
         "avg_main_pieces_per_order": economics["avg_main_pieces_per_order"],
         "computed_aov_sar": economics["computed_aov_sar"],
         "conversion_rate_percent": conv,
@@ -781,3 +783,85 @@ def admin_put_store_settings(
         raise HTTPException(status_code=400, detail="No settings provided")
     saved = save_store_config(db, patch)
     return {"ok": True, "config": saved}
+
+
+class AdsLabAnalyzeBody(BaseModel):
+    name: str = Field(default="", max_length=120)
+    platform: str = Field(default="meta", max_length=40)
+    spend_sar: float = Field(..., ge=0, le=10_000_000)
+    leads: int = Field(..., ge=0, le=10_000_000)
+    confirmed: int | None = Field(default=None, ge=0, le=10_000_000)
+    delivered: int | None = Field(default=None, ge=0, le=10_000_000)
+    revenue_sar: float | None = Field(default=None, ge=0, le=100_000_000)
+    day_start: str | None = Field(default=None, max_length=32)
+    day_end: str | None = Field(default=None, max_length=32)
+    notes: str | None = Field(default=None, max_length=500)
+    save: bool = False
+
+
+@router.get("/admin/data/ads-lab")
+def admin_ads_lab_list(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    cfg = get_store_config(db)
+    pd = cfg.get("profit_defaults") or {}
+    return {
+        "logs": list_ad_logs(db),
+        "defaults": {
+            "confirmation_pct": pd.get("confirmation_pct", 50),
+            "delivery_pct": pd.get("delivery_pct", 70),
+            "product_cost_usd": pd.get("product_cost_usd", 0),
+            "avg_main_pieces": pd.get("avg_main_pieces", 1),
+            "sar_per_usd": cfg.get("sar_per_usd", 3.75),
+        },
+        "notes": (
+            "دخل صرف الإعلانات + الـ leads (والإيراد/التأكيد اختياري). "
+            "التحليل كيحسب CPL و ROAS والربح الصافي مع رسوم COD و COGS من الإعدادات."
+        ),
+    }
+
+
+@router.post("/admin/data/ads-lab/analyze")
+def admin_ads_lab_analyze(
+    body: AdsLabAnalyzeBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    analysis = analyze_ad_run(
+        db,
+        spend_sar=body.spend_sar,
+        leads=body.leads,
+        confirmed=body.confirmed,
+        delivered=body.delivered,
+        revenue_sar=body.revenue_sar,
+        name=body.name,
+        platform=body.platform,
+    )
+    saved_row = None
+    if body.save:
+        saved_row = save_ad_log(
+            db,
+            {
+                "day_start": body.day_start,
+                "day_end": body.day_end,
+                "notes": body.notes,
+            },
+            analysis,
+        )
+    return {"ok": True, "analysis": analysis, "saved": saved_row}
+
+
+@router.post("/admin/data/ads-lab/delete")
+def admin_ads_lab_delete(
+    body: dict[str, Any],
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    log_id = str(body.get("id") or "").strip()
+    if not log_id:
+        raise HTTPException(status_code=400, detail="id required")
+    ok = delete_ad_log(db, log_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="log not found")
+    return {"ok": True, "logs": list_ad_logs(db)}

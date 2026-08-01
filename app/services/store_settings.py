@@ -35,6 +35,8 @@ DEFAULT_STORE_CONFIG: dict[str, Any] = {
         "upsell_attach_pct": 0.0,
         "avg_main_pieces": 1.0,
     },
+    # Manual Meta/TikTok spend runs for Ads Lab (admin dashboard).
+    "ad_lab_logs": [],
 }
 
 _CACHE_TTL_SEC = 30.0
