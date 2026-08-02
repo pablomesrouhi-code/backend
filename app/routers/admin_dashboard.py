@@ -22,6 +22,13 @@ from app.deps import get_db
 from app.models.analytics_models import AnalyticsEvent
 from app.models.order_models import Order, OrderItem, TrackingEvent
 from app.services.admin_ads_lab import analyze_ad_run, delete_ad_log, list_ad_logs, save_ad_log
+from app.services.admin_brand_day import (
+    brand_day_bootstrap,
+    delete_brand_day,
+    list_brand_days,
+    month_resume,
+    save_brand_day,
+)
 from app.services.admin_economics import compute_store_economics, sar_per_usd
 from app.services.cod_network import mark_order_cod_delivery, resend_persisted_order_to_cod_network
 from app.services.store_settings import get_store_config, save_store_config
@@ -888,3 +895,82 @@ def admin_ads_lab_delete(
     if not ok:
         raise HTTPException(status_code=404, detail="log not found")
     return {"ok": True, "logs": list_ad_logs(db)}
+
+
+class BrandDaySaveBody(BaseModel):
+    day: str = Field(..., min_length=8, max_length=32)
+    creatives: int = Field(default=0, ge=0, le=500)
+    steps: dict[str, bool] = Field(default_factory=dict)
+    notes: str | None = Field(default=None, max_length=800)
+    products: str | None = Field(default=None, max_length=200)
+
+
+@router.get("/admin/data/brand-day")
+def admin_brand_day_get(
+    day: str | None = None,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    return brand_day_bootstrap(db, day)
+
+
+@router.post("/admin/data/brand-day/save")
+def admin_brand_day_save(
+    body: BrandDaySaveBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    try:
+        row = save_brand_day(
+            db,
+            day=body.day,
+            creatives=body.creatives,
+            steps=body.steps,
+            notes=body.notes or "",
+            products=body.products or "",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    day_d = date.fromisoformat(row["day"])
+    return {
+        "ok": True,
+        "entry": row,
+        "month": month_resume(db, day_d.year, day_d.month),
+        "logs": list_brand_days(db)[:60],
+    }
+
+
+@router.get("/admin/data/brand-day/month")
+def admin_brand_day_month(
+    year: int | None = None,
+    month: int | None = None,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    today = datetime.now(STORE_TZ).date()
+    y = year if year is not None else today.year
+    m = month if month is not None else today.month
+    try:
+        return {"ok": True, "month": month_resume(db, y, m)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/admin/data/brand-day/delete")
+def admin_brand_day_delete(
+    body: dict[str, Any],
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    key = str(body.get("id") or body.get("day") or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="id or day required")
+    ok = delete_brand_day(db, key)
+    if not ok:
+        raise HTTPException(status_code=404, detail="day not found")
+    today = datetime.now(STORE_TZ).date()
+    return {
+        "ok": True,
+        "logs": list_brand_days(db)[:60],
+        "month": month_resume(db, today.year, today.month),
+    }

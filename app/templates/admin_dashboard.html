@@ -363,6 +363,37 @@
     .ads-kpi .v { font-size: 1.15rem; font-weight: 900; margin-top: 4px; color: var(--authority); }
     .ads-kpi .v.neg { color: var(--danger); }
     .ads-kpi .v.pos { color: var(--accent-mint); }
+    .bd-steps {
+      display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
+    }
+    .bd-steps label {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
+      background: #fff; font-size: .88rem; cursor: pointer; user-select: none;
+    }
+    .bd-steps label:has(input:checked) {
+      border-color: rgba(45,157,120,.45);
+      background: linear-gradient(90deg, rgba(45,157,120,.1), #fff 50%);
+    }
+    .bd-steps input { width: 18px; height: 18px; accent-color: var(--accent-mint); }
+    .bd-month-box {
+      border-radius: 18px; padding: 18px 16px; margin-bottom: 16px;
+      border: 1px solid var(--border);
+      background: linear-gradient(145deg, #fff 0%, #f7f4f2 100%);
+    }
+    .bd-month-box.ok { border-color: rgba(45,157,120,.4); background: linear-gradient(145deg, rgba(45,157,120,.1), #fff 55%); }
+    .bd-month-box.warn { border-color: rgba(184,120,40,.4); background: linear-gradient(145deg, rgba(230,180,80,.12), #fff 55%); }
+    .bd-month-box.bad { border-color: rgba(199,62,77,.35); background: linear-gradient(145deg, rgba(199,62,77,.08), #fff 55%); }
+    .bd-month-box h3 { margin: 0; font-size: 1.35rem; font-weight: 900; }
+    .bd-month-box .bd-sum { margin: 8px 0 0; font-size: .92rem; line-height: 1.55; }
+    .bd-progress {
+      margin-top: 12px; height: 10px; border-radius: 999px; background: #ebe6e3; overflow: hidden;
+    }
+    .bd-progress > span {
+      display: block; height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, #2d9d78, #1f7a5c); width: 0%;
+      transition: width .35s ease;
+    }
     @media (max-width: 520px) {
       .kpi .value { font-size: 1.28rem; }
     }
@@ -409,6 +440,7 @@
           <button type="button" id="tab-orders">الطلبات <span class="pill ok" id="orders-live-badge" style="display:none;margin-inline-start:6px;font-size:.72rem;">0</span></button>
           <button type="button" id="tab-profit">Profit calculator</button>
           <button type="button" id="tab-ads">مختبر الإعلانات</button>
+          <button type="button" id="tab-brand">يوم البراند</button>
           <button type="button" id="tab-settings">إعدادات المتجر</button>
           <button type="button" id="tab-capi">CAPI logs</button>
         </div>
@@ -673,6 +705,67 @@
         </div>
       </div>
       <footer class="note" id="ads-note" style="margin-top:12px;"></footer>
+    </div>
+
+    <div class="panel" id="brand-panel" style="display:none;margin-top:16px;">
+      <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">يوم البراند — نبتة لابو</p>
+      <p style="font-size:.86rem;color:var(--muted);margin:0 0 14px;line-height:1.55;">
+        عبّي <strong>كل نهار</strong>: شحال creative درتي (الهدف <span id="bd-goal-label">10</span>/يوم)
+        و واش كمّلتي les étapes. فآخر الشهر كيبان résumé واش قربتي للهدف.
+      </p>
+
+      <div id="bd-month-box" class="bd-month-box warn">
+        <p class="v-label" style="margin:0 0 4px;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);">résumé الشهر</p>
+        <h3 id="bd-month-title">—</h3>
+        <p class="bd-sum" id="bd-month-summary">Loading…</p>
+        <div class="bd-progress" title="قرب الهدف"><span id="bd-month-bar"></span></div>
+        <p id="bd-month-pct" style="margin:8px 0 0;font-size:.8rem;color:var(--muted);"></p>
+        <ul class="ads-tips" id="bd-month-actions" style="margin-top:12px;"></ul>
+        <div class="ads-kpi-grid" id="bd-month-kpis" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="calc-block">
+        <h4>فورم اليوم</h4>
+        <div class="calc-grid">
+          <label class="field">النهار<input type="date" id="bd-day"/></label>
+          <label class="field">Creatives اللي درتي اليوم<input type="number" id="bd-creatives" step="1" min="0" max="500" placeholder="الهدف 10"/></label>
+          <label class="field">المنتجات / الزاوية<input type="text" id="bd-products" placeholder="مثلاً: رونق C · نسيج · شهر هادي"/></label>
+          <label class="field">ملاحظات اليوم<input type="text" id="bd-notes" placeholder="شنو مشى زوين / شنو عطّل"/></label>
+        </div>
+        <h4 style="margin-top:16px;">Étapes ديال النهار</h4>
+        <div class="bd-steps" id="bd-steps"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+          <button type="button" class="primary" id="bd-save-btn">حفظ نهار اليوم</button>
+          <button type="button" class="ghost" id="bd-reload-btn">تحميل</button>
+          <label class="field" style="margin:0;min-width:140px;">شهر الـ résumé
+            <input type="month" id="bd-month-pick"/>
+          </label>
+        </div>
+        <p id="bd-form-msg" style="margin:10px 0 0;font-size:.82rem;color:var(--muted);"></p>
+      </div>
+
+      <div class="calc-block" style="margin-top:8px;">
+        <h4>سجل الأيام</h4>
+        <p class="hint">آخر الأيام اللي عمرتي — باش تشوف الوتيرة قبل résumé الشهر.</p>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>النهار</th>
+                <th>Creatives</th>
+                <th>Étapes</th>
+                <th>نقطة</th>
+                <th>الحكم</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="bd-logs-body">
+              <tr><td colspan="6" style="color:var(--muted);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <footer class="note" style="margin-top:12px;">هدف افتراضي: 10 creative/يوم لـ نبتة لابو · تتحدّث نفس النهار إلا عاودتي الحفظ.</footer>
     </div>
 
     <div class="panel" id="settings-panel" style="display:none;margin-top:16px;">
@@ -1152,6 +1245,7 @@
         orders: 'orders-panel',
         profit: 'profit-panel',
         ads: 'ads-panel',
+        brand: 'brand-panel',
         settings: 'settings-panel',
         capi: 'capi-panel',
       };
@@ -1160,6 +1254,7 @@
         orders: 'tab-orders',
         profit: 'tab-profit',
         ads: 'tab-ads',
+        brand: 'tab-brand',
         settings: 'tab-settings',
         capi: 'tab-capi',
       };
@@ -1172,6 +1267,184 @@
       if (name === 'orders') startOrdersPoll();
       else stopOrdersPoll();
       if (name === 'ads') void loadAdsLab();
+      if (name === 'brand') void loadBrandDay();
+    }
+
+    let bdStepsDef = [];
+    let bdGoal = 10;
+
+    function renderBdSteps(stepsDef, checked) {
+      bdStepsDef = stepsDef || [];
+      const wrap = document.getElementById('bd-steps');
+      const src = checked || {};
+      wrap.innerHTML = bdStepsDef.map((s) => `
+        <label>
+          <input type="checkbox" data-bd-step="${s.id}" ${src[s.id] ? 'checked' : ''}/>
+          <span>${s.label_ar}</span>
+        </label>
+      `).join('');
+    }
+
+    function collectBdSteps() {
+      const out = {};
+      document.querySelectorAll('[data-bd-step]').forEach((el) => {
+        out[el.getAttribute('data-bd-step')] = !!el.checked;
+      });
+      return out;
+    }
+
+    function renderBdMonth(m) {
+      if (!m) return;
+      const box = document.getElementById('bd-month-box');
+      const v = m.verdict || {};
+      const tone = v.tone === 'ok' ? 'ok' : (v.tone === 'bad' ? 'bad' : 'warn');
+      box.className = 'bd-month-box ' + tone;
+      document.getElementById('bd-month-title').textContent = `${v.label_ar || '—'} · ${m.month_label_ar || ''}`;
+      document.getElementById('bd-month-summary').textContent = v.summary_ar || '';
+      const pct = Math.max(0, Math.min(100, Number(m.closeness_pct) || 0));
+      document.getElementById('bd-month-bar').style.width = pct + '%';
+      document.getElementById('bd-month-pct').textContent =
+        `قرب الهدف: ${pct}% · Creatives ${m.total_creatives || 0}/${m.target_to_date || 0} حتى اليوم · هدف الشهر ${m.target_month || 0}`;
+      document.getElementById('bd-month-actions').innerHTML =
+        (v.actions_ar || []).map((t) => `<li>${String(t)}</li>`).join('');
+      document.getElementById('bd-month-kpis').innerHTML = [
+        ['أيام معبّية', `${m.filled_days || 0}/${m.elapsed_days || 0}`, ''],
+        ['Creatives', m.total_creatives, ''],
+        ['متوسط/يوم', m.avg_creatives, ''],
+        ['أيام وصلو الهدف', m.days_hit_goal, ''],
+        ['Étapes', m.steps_pct, '%'],
+        ['قرب الهدف', m.closeness_pct, '%'],
+      ].map(([k, val, u]) => {
+        const show = val == null ? '—' : `${val}${u ? ' ' + u : ''}`;
+        return `<div class="ads-kpi"><div class="k">${k}</div><div class="v">${show}</div></div>`;
+      }).join('');
+      const pick = document.getElementById('bd-month-pick');
+      if (pick && m.year && m.month) {
+        pick.value = `${m.year}-${String(m.month).padStart(2, '0')}`;
+      }
+    }
+
+    function renderBdLogs(logs) {
+      const body = document.getElementById('bd-logs-body');
+      if (!logs || !logs.length) {
+        body.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">ما عمرتي حتى نهار بعد — ابدأ باليوم.</td></tr>';
+        return;
+      }
+      body.innerHTML = logs.map((row) => {
+        const sc = row.score || {};
+        const tone = sc.tone === 'ok' ? 'ok' : (sc.tone === 'bad' ? 'bad' : '');
+        return `<tr>
+          <td>${row.day || '—'}</td>
+          <td>${row.creatives ?? '—'}/${row.creatives_goal ?? bdGoal}</td>
+          <td>${sc.steps_done ?? '—'}/${sc.steps_total ?? '—'}</td>
+          <td><strong>${sc.score ?? '—'}</strong></td>
+          <td><span class="pill ${tone}">${sc.label_ar || '—'}</span></td>
+          <td>
+            <button type="button" class="ghost" data-bd-load="${row.day}" style="padding:6px 10px;font-size:.75rem;">فتح</button>
+            <button type="button" class="ghost" data-bd-del="${row.id || row.day}" style="padding:6px 10px;font-size:.75rem;">حذف</button>
+          </td>
+        </tr>`;
+      }).join('');
+      body.querySelectorAll('[data-bd-load]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const d = btn.getAttribute('data-bd-load');
+          if (d) void loadBrandDay(d);
+        });
+      });
+      body.querySelectorAll('[data-bd-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-bd-del');
+          if (!id || !window.confirm('تحذف هاد النهار من السجل؟')) return;
+          const r = await api('/api/admin/data/brand-day/delete', {
+            method: 'POST',
+            body: JSON.stringify({ id }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            document.getElementById('bd-form-msg').textContent = 'فشل الحذف';
+            return;
+          }
+          renderBdLogs(j.logs || []);
+          renderBdMonth(j.month);
+        });
+      });
+    }
+
+    function fillBdForm(entry, dayFallback) {
+      document.getElementById('bd-day').value = (entry && entry.day) || dayFallback || '';
+      document.getElementById('bd-creatives').value = entry ? (entry.creatives ?? 0) : '';
+      document.getElementById('bd-products').value = (entry && entry.products) || '';
+      document.getElementById('bd-notes').value = (entry && entry.notes) || '';
+      renderBdSteps(bdStepsDef, (entry && entry.steps) || {});
+    }
+
+    async function loadBrandDay(day) {
+      const msg = document.getElementById('bd-form-msg');
+      try {
+        const q = day ? `?day=${encodeURIComponent(day)}` : '';
+        const r = await api('/api/admin/data/brand-day' + q);
+        const j = await r.json();
+        if (!r.ok) {
+          msg.textContent = 'تعذّر تحميل يوم البراند';
+          return;
+        }
+        bdGoal = j.creatives_goal || 10;
+        document.getElementById('bd-goal-label').textContent = String(bdGoal);
+        document.getElementById('bd-creatives').placeholder = 'الهدف ' + bdGoal;
+        bdStepsDef = j.steps_def || [];
+        fillBdForm(j.entry, j.day);
+        renderBdMonth(j.month);
+        renderBdLogs(j.logs || []);
+        msg.textContent = j.entry ? 'نهار محمّل — عدّل و احفظ.' : 'نهار جديد — عبّي و احفظ.';
+        msg.style.color = 'var(--muted)';
+      } catch (e) {
+        msg.textContent = 'خطأ تحميل يوم البراند';
+        msg.style.color = 'var(--danger)';
+      }
+    }
+
+    async function saveBrandDay() {
+      const msg = document.getElementById('bd-form-msg');
+      const day = document.getElementById('bd-day').value;
+      if (!day) {
+        msg.textContent = 'اختار النهار.';
+        msg.style.color = 'var(--danger)';
+        return;
+      }
+      const creatives = adsInt('bd-creatives');
+      msg.textContent = 'كيحفظ…';
+      msg.style.color = 'var(--muted)';
+      const r = await api('/api/admin/data/brand-day/save', {
+        method: 'POST',
+        body: JSON.stringify({
+          day,
+          creatives: creatives == null ? 0 : creatives,
+          steps: collectBdSteps(),
+          products: document.getElementById('bd-products').value.trim() || null,
+          notes: document.getElementById('bd-notes').value.trim() || null,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        msg.textContent = 'فشل الحفظ: ' + (j.detail || r.status);
+        msg.style.color = 'var(--danger)';
+        return;
+      }
+      fillBdForm(j.entry, day);
+      renderBdMonth(j.month);
+      renderBdLogs(j.logs || []);
+      const sc = (j.entry && j.entry.score) || {};
+      msg.textContent = `تحفّظ ✓ — ${sc.label_ar || ''} (${sc.score ?? '—'}/100)`;
+      msg.style.color = 'var(--accent-mint)';
+    }
+
+    async function loadBrandMonthPick() {
+      const pick = document.getElementById('bd-month-pick').value;
+      if (!pick || pick.length < 7) return;
+      const [y, m] = pick.split('-').map(Number);
+      const r = await api(`/api/admin/data/brand-day/month?year=${y}&month=${m}`);
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) renderBdMonth(j.month);
     }
 
     function adsNum(id) {
@@ -1747,6 +2020,17 @@
     document.getElementById('tab-ads').addEventListener('click', () => showAdminTab('ads'));
     document.getElementById('ads-analyze-btn').addEventListener('click', () => void runAdsAnalyze(false));
     document.getElementById('ads-save-btn').addEventListener('click', () => void runAdsAnalyze(true));
+    document.getElementById('tab-brand').addEventListener('click', () => showAdminTab('brand'));
+    document.getElementById('bd-save-btn').addEventListener('click', () => void saveBrandDay());
+    document.getElementById('bd-reload-btn').addEventListener('click', () => {
+      const d = document.getElementById('bd-day').value || undefined;
+      void loadBrandDay(d);
+    });
+    document.getElementById('bd-day').addEventListener('change', () => {
+      const d = document.getElementById('bd-day').value;
+      if (d) void loadBrandDay(d);
+    });
+    document.getElementById('bd-month-pick').addEventListener('change', () => void loadBrandMonthPick());
     document.getElementById('tab-settings').addEventListener('click', () => {
       showAdminTab('settings');
       void loadStoreSettings();

@@ -37,6 +37,11 @@ DEFAULT_STORE_CONFIG: dict[str, Any] = {
     },
     # Manual Meta/TikTok spend runs for Ads Lab (admin dashboard).
     "ad_lab_logs": [],
+    # Daily brand work log (creatives + étapes) for Nabta Labo admin.
+    "brand_day_logs": [],
+    "brand_day_defaults": {
+        "creatives_per_day": 10,
+    },
 }
 
 _CACHE_TTL_SEC = 30.0
