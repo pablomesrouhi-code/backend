@@ -31,6 +31,9 @@ class CreateOrderResponse(BaseModel):
     subtotal_sar: int
     upsell_total_sar: int
     total_sar: int
+    cod_network_ok: bool | None = None
+    cod_network_error: str | None = None
+    cod_network_lead_id: int | None = None
 
 
 class EnsureSheetDeliveryIn(BaseModel):

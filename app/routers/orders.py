@@ -354,6 +354,9 @@ def create_order(
             db.rollback()
 
     # COD Network: sync on checkout (same reliability as Google Sheet) — not background.
+    cod_ok: bool | None = None
+    cod_err: str | None = None
+    cod_lead_id: int | None = None
     if cod_network_enabled():
         try:
             cod_payload = build_cod_network_lead_payload(
@@ -366,19 +369,26 @@ def create_order(
                 total_sar=float(subtotal + upsell_total),
             )
             cod_skus = "/".join(str(i.get("sku", "")) for i in cod_payload.get("items") or [])
-            apply_cod_network_delivery_to_order(order_id, cod_payload)
+            outcome, err, lead_id = apply_cod_network_delivery_to_order(order_id, cod_payload)
+            cod_ok = outcome == "ok"
+            cod_err = err
+            cod_lead_id = lead_id
             logger.info(
-                "[orders] COD_NETWORK_SYNC_DONE order_number=%s order_id=%s sku=%s",
+                "[orders] COD_NETWORK_SYNC_DONE order_number=%s order_id=%s sku=%s outcome=%s detail=%s",
                 order_number,
                 order_id,
                 cod_skus,
+                outcome,
+                (err[:200] if err else None),
             )
         except Exception:
             logger.exception("[orders] cod_network_payload_failed order_number=%s", order_number)
+            cod_ok = False
+            cod_err = "cod_network_payload_failed_see_api_logs"
             try:
                 o_row = db.get(Order, order_id)
                 if o_row is not None:
-                    o_row.cod_network_error = "cod_network_payload_failed_see_api_logs"
+                    o_row.cod_network_error = cod_err
                     db.commit()
             except SQLAlchemyError:
                 logger.exception(
@@ -401,6 +411,9 @@ def create_order(
         subtotal_sar=subtotal,
         upsell_total_sar=upsell_total,
         total_sar=subtotal + upsell_total,
+        cod_network_ok=cod_ok,
+        cod_network_error=cod_err,
+        cod_network_lead_id=cod_lead_id,
     )
 
 
