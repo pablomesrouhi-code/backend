@@ -19,7 +19,7 @@ from app.services.sheet_webhook import sheet_order_public_id
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_COD_SKU = "MP-39GYGBTANIO7"
+DEFAULT_COD_SKU = "RWCFH"
 _cached_default_sku: str | None = None
 
 
@@ -76,15 +76,12 @@ def _sku_overrides() -> dict[str, str]:
 
 
 def resolve_cod_sku(product_id: str) -> str:
+    """SKU sent to COD Network — env overrides win, else store catalog."""
+
     key = product_id.strip().lower()
     overrides = _sku_overrides()
     if key in overrides:
         return overrides[key]
-    # Live COD accounts often still use the legacy default for Rawnaq-C.
-    if key == "rawnaq-c":
-        env_default = (os.getenv("COD_NETWORK_DEFAULT_SKU") or "").strip()
-        if env_default:
-            return env_default
     return resolve_sku(key)
 
 
