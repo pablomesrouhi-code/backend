@@ -30,7 +30,12 @@ from app.services.admin_brand_day import (
     save_brand_day,
 )
 from app.services.admin_economics import compute_store_economics, sar_per_usd
-from app.services.cod_network import mark_order_cod_delivery, resend_persisted_order_to_cod_network
+from app.services.catalog import resolve_sku
+from app.services.cod_network import (
+    mark_order_cod_delivery,
+    resend_persisted_order_to_cod_network,
+    resolve_cod_sku,
+)
 from app.services.store_settings import get_store_config, save_store_config
 
 router = APIRouter()
@@ -651,7 +656,49 @@ def admin_resend_order_cod(
         "lead_id": lead_id,
         "order_number": order.order_number,
         "order_id": str(order.id),
+        "skus": [resolve_cod_sku(it.product_id) for it in order.items],
     }
+
+
+@router.get("/admin/data/cod-network/recent")
+def admin_cod_network_recent(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_user),
+) -> dict[str, Any]:
+    """Last orders with COD Network send status — for debugging failed leads."""
+
+    rows = db.scalars(
+        select(Order)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
+        .limit(25)
+    ).all()
+    out = []
+    for o in rows:
+        skus = []
+        for it in o.items:
+            try:
+                skus.append(resolve_cod_sku(it.product_id))
+            except Exception:
+                try:
+                    skus.append(resolve_sku(it.product_id))
+                except Exception:
+                    skus.append(it.product_id)
+        out.append(
+            {
+                "order_number": o.order_number,
+                "order_id": str(o.id),
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+                "cod_network_sent_at": o.cod_network_sent_at.isoformat()
+                if o.cod_network_sent_at
+                else None,
+                "cod_network_lead_id": o.cod_network_lead_id,
+                "cod_network_error": o.cod_network_error,
+                "skus": skus,
+                "ok": bool(o.cod_network_sent_at and not o.cod_network_error),
+            }
+        )
+    return {"ok": True, "orders": out}
 
 
 class BulkResendBody(BaseModel):

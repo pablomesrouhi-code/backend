@@ -42,7 +42,7 @@ def _status_response() -> CodNetworkStatus:
         "If leads fail, open the order in Admin and read «خطأ COD Network». "
         "SKU must match your COD Network seller products exactly — "
         "set COD_NETWORK_SKU_OVERRIDES=product_id:SKU if needed "
-        "(example: rawnaq-c:RWCFH,shahr-hadi:YOUR_SKU)."
+        "(example: rawnaq-c:MP-39GYGBTANIO7,shahr-hadi:CLCYPWFHH)."
     )
     if probe.get("sample_skus"):
         hint += f" Sample SKUs from COD API: {', '.join(probe['sample_skus'][:8])}."

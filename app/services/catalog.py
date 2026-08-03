@@ -37,17 +37,14 @@ PRODUCT_NAMES: dict[str, tuple[str, str]] = {
     ),
 }
 
-# Seller SKU per product — MUST match COD Network seller catalog exactly.
-# Verified live from COD /products: RWCFH, CLCYPWFHH, PRBTCS, MGAGFD, SRHRPW, PSPFH, …
+# Seller SKU per product — COD Network (seller-confirmed).
 PRODUCT_SKUS: dict[str, str] = {
-    "rawnaq-c": "RWCFH",
+    "rawnaq-c": "MP-39GYGBTANIO7",
     "khiffabiotic": "PRBTCS",
     "laylmag": "MGAGFD",
     "quwwat-sha3r": "SRHRPW",
     "wudouh": "PSPFH",
     "shahr-hadi": "CLCYPWFHH",
-    # Not yet on the COD Network seller account — add the product there, then set
-    # COD_NETWORK_SKU_OVERRIDES=naseej:XXX,vitaflow:YYY or update these values.
     "naseej": "MP-ZTYR4BRMRP0F",
     "vitaflow": "MP-P9XG0HKJNKRZ",
 }

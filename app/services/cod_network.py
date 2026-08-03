@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -19,7 +20,7 @@ from app.services.sheet_webhook import sheet_order_public_id
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_COD_SKU = "RWCFH"
+DEFAULT_COD_SKU = "MP-39GYGBTANIO7"
 _cached_default_sku: str | None = None
 
 
@@ -57,7 +58,7 @@ def default_cod_sku() -> str:
 
 
 def _sku_overrides() -> dict[str, str]:
-    """``COD_NETWORK_SKU_OVERRIDES=rawnaq-c:RWCFH,shahr-hadi:XXXX`` — wins over catalog."""
+    """``COD_NETWORK_SKU_OVERRIDES=rawnaq-c:MP-…,shahr-hadi:CLCYPWFHH`` — wins over catalog."""
 
     raw = (os.getenv("COD_NETWORK_SKU_OVERRIDES") or "").strip()
     out: dict[str, str] = {}
@@ -154,9 +155,10 @@ def build_cod_network_lead_payload(
     payload: dict[str, Any] = {
         "phone": _phone_e164(phone_e164, phone_digits),
         "customer_name": customer_name.strip(),
-        # Both keys — older/newer COD Network docs disagree on the field name.
+        # Both keys — COD Network docs/clients disagree on the field name.
         "order-id": public_id,
         "order_id": public_id,
+        "country": "SA",
         "items": items,
     }
 
@@ -168,6 +170,48 @@ def build_cod_network_lead_payload(
         payload["price"] = round(float(total_sar) + 1e-9, 2)
 
     return payload
+
+
+def _payload_variants(base: dict[str, Any]) -> list[dict[str, Any]]:
+    """Try compatible body shapes — COD Network is picky across accounts."""
+
+    variants: list[dict[str, Any]] = []
+    primary = dict(base)
+    variants.append(primary)
+
+    # order_id only (no hyphen key)
+    v2 = dict(primary)
+    v2.pop("order-id", None)
+    variants.append(v2)
+
+    # order-id only
+    v3 = dict(primary)
+    v3.pop("order_id", None)
+    variants.append(v3)
+
+    # items use qty alias
+    v4 = dict(primary)
+    v4["items"] = [
+        {"sku": it["sku"], "qty": it["quantity"], "quantity": it["quantity"]}
+        for it in (primary.get("items") or [])
+        if isinstance(it, dict)
+    ]
+    variants.append(v4)
+
+    # country iso3
+    v5 = dict(primary)
+    v5["country"] = "SAU"
+    variants.append(v5)
+
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for v in variants:
+        key = json.dumps(v, sort_keys=True, default=str)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(v)
+    return out
 
 
 def rebuild_cod_network_payload_from_persisted_order(order: Order) -> dict[str, Any]:
@@ -313,75 +357,66 @@ def send_cod_network_lead(
         "User-Agent": "NabtalaboBackend/1.0 (+cod-network leads)",
     }
 
-    # Try primary phone, then bare 966… if API rejects phone format.
-    phone_list = _phone_variants(
-        str(payload.get("phone") or ""),
-        "",
-    )
+    phone_list = _phone_variants(str(payload.get("phone") or ""), "")
     if not phone_list and payload.get("phone"):
         phone_list = [str(payload["phone"])]
 
-    retries = _retries()
+    retries = max(1, min(_retries(), 3))
     last_err: str | None = None
-    attempt_payload = dict(payload)
+    body_variants = _payload_variants(payload)
 
-    for phone in phone_list or [str(payload.get("phone") or "")]:
-        attempt_payload = dict(payload)
-        attempt_payload["phone"] = phone
+    for body_variant in body_variants:
+        for phone in phone_list or [str(payload.get("phone") or "")]:
+            attempt_payload = dict(body_variant)
+            attempt_payload["phone"] = phone
+            for attempt in range(retries):
+                try:
+                    with httpx.Client(timeout=25.0, follow_redirects=True) as client:
+                        resp = client.post(url, json=attempt_payload, headers=headers)
+                except Exception:
+                    last_err = "request_error"
+                    logger.warning(
+                        "[cod_network] connection_error phone=%s attempt=%s",
+                        phone[:6] + "***",
+                        attempt + 1,
+                    )
+                    if attempt < retries - 1:
+                        time.sleep(min(8.0, 2**attempt))
+                        continue
+                    break
 
-        for attempt in range(retries):
-            try:
-                with httpx.Client(timeout=25.0, follow_redirects=True) as client:
-                    resp = client.post(url, json=attempt_payload, headers=headers)
-            except Exception:
-                last_err = "request_error"
+                try:
+                    body = resp.json()
+                except Exception:
+                    body = None
+
+                ok, lead_id = _is_success_body(resp, body)
+                if ok:
+                    return "ok", None, lead_id
+
+                last_err = _error_from_body(resp, body)
                 logger.warning(
-                    "[cod_network] attempt %s/%s connection_error phone=%s",
-                    attempt + 1,
-                    retries,
+                    "[cod_network] fail status=%s phone=%s sku=%s err=%s body=%s",
+                    resp.status_code,
                     phone[:6] + "***",
+                    ",".join(i.get("sku", "") for i in (attempt_payload.get("items") or [])),
+                    last_err,
+                    (resp.text or "")[:500],
                 )
-                if attempt < retries - 1:
+
+                err_l = (last_err or "").lower()
+                if any(x in err_l for x in ("phone", "mobile", "رقم")):
+                    break  # next phone
+                if resp.status_code in (408, 429, 500, 502, 503, 504) and attempt < retries - 1:
                     time.sleep(min(8.0, 2**attempt))
                     continue
-                logger.exception("[cod_network] all retries exhausted (connection)")
-                break
-
-            try:
-                body = resp.json()
-            except Exception:
-                body = None
-
-            ok, lead_id = _is_success_body(resp, body)
-            if ok:
-                return "ok", None, lead_id
-
-            last_err = _error_from_body(resp, body)
-            logger.warning(
-                "[cod_network] attempt %s/%s status=%s phone=%s sku=%s body=%s",
-                attempt + 1,
-                retries,
-                resp.status_code,
-                phone[:6] + "***",
-                ",".join(i.get("sku", "") for i in (attempt_payload.get("items") or [])),
-                (resp.text or "")[:500],
-            )
-
-            # Phone-format errors → try next phone variant immediately
-            err_l = (last_err or "").lower()
-            if any(x in err_l for x in ("phone", "mobile", "رقم")) and phone != phone_list[-1]:
-                break
-
-            if resp.status_code in (408, 429, 500, 502, 503, 504) and attempt < retries - 1:
-                time.sleep(min(8.0, 2**attempt))
+                break  # next body variant
+            else:
                 continue
+            # continue phone/body loops
+        # if auth error, no point trying other shapes
+        if last_err and ("unauth" in last_err.lower() or "401" in last_err):
             break
-        else:
-            continue
-        # if we broke due to phone error, continue outer phone loop
-        if last_err and any(x in last_err.lower() for x in ("phone", "mobile", "رقم")):
-            continue
-        break
 
     return "failed", last_err or "unknown", None
 
