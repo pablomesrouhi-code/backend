@@ -24,6 +24,8 @@ from app.services.cod_network import (
     apply_cod_network_delivery_to_order,
     build_cod_network_lead_payload,
     cod_network_enabled,
+    mark_order_cod_delivery,
+    resend_persisted_order_to_cod_network,
 )
 from app.services.order_number import next_order_number
 from app.services.phone_sa import normalize_sa_phone
@@ -57,12 +59,6 @@ def _order_matches_lead_token(order: Order, lead_event_id: str) -> bool:
         if candidate and candidate.strip() == token:
             return True
     return False
-
-
-async def _run_cod_network_delivery_async(
-    order_id: uuid.UUID, payload: dict[str, object]
-) -> None:
-    await asyncio.to_thread(apply_cod_network_delivery_to_order, order_id, payload)
 
 
 async def _run_telegram_order_notify_async(
@@ -357,6 +353,7 @@ def create_order(
             logger.exception("[orders] persist_sheet_build_error_failed order_id=%s", order_id)
             db.rollback()
 
+    # COD Network: sync on checkout (same reliability as Google Sheet) — not background.
     if cod_network_enabled():
         try:
             cod_payload = build_cod_network_lead_payload(
@@ -369,9 +366,9 @@ def create_order(
                 total_sar=float(subtotal + upsell_total),
             )
             cod_skus = "/".join(str(i.get("sku", "")) for i in cod_payload.get("items") or [])
-            background_tasks.add_task(_run_cod_network_delivery_async, order_id, cod_payload)
+            apply_cod_network_delivery_to_order(order_id, cod_payload)
             logger.info(
-                "[orders] COD_NETWORK_ENQUEUED order_number=%s order_id=%s sku=%s",
+                "[orders] COD_NETWORK_SYNC_DONE order_number=%s order_id=%s sku=%s",
                 order_number,
                 order_id,
                 cod_skus,
@@ -407,12 +404,85 @@ def create_order(
     )
 
 
+@router.post("/orders/ensure-cod")
+def ensure_cod_network_delivery(
+    body: EnsureSheetDeliveryIn,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Thank-you backup: push lead to COD Network if checkout sync did not land."""
+
+    try:
+        oid = uuid.UUID(body.order_id.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid order_id") from e
+
+    order = db.scalar(
+        select(Order).where(Order.id == oid).options(selectinload(Order.items))
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if not _order_matches_lead_token(order, body.lead_event_id):
+        logger.warning(
+            "[orders] ensure_cod bad_token order_number=%s phone=%s",
+            order.order_number,
+            mask_phone_sa(order.phone_local),
+        )
+        raise HTTPException(status_code=403, detail="Invalid lead_event_id")
+
+    if not cod_network_enabled():
+        return {
+            "ok": False,
+            "already_sent": False,
+            "outcome": "skipped",
+            "detail": "cod_network_disabled",
+            "order_number": order.order_number,
+        }
+
+    if order.cod_network_sent_at and not order.cod_network_error:
+        return {
+            "ok": True,
+            "already_sent": True,
+            "order_number": order.order_number,
+            "lead_id": order.cod_network_lead_id,
+        }
+
+    try:
+        outcome, err, lead_id = resend_persisted_order_to_cod_network(order)
+    except ValueError as e:
+        logger.warning("[orders] ensure_cod build_failed order_number=%s: %s", order.order_number, e)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    mark_order_cod_delivery(order, outcome, err, lead_id)
+    try:
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Failed to persist COD Network status") from e
+
+    logger.info(
+        "[orders] ensure_cod order_number=%s outcome=%s lead_id=%s detail=%s",
+        order.order_number,
+        outcome,
+        lead_id,
+        (err[:200] if err else None),
+    )
+    return {
+        "ok": outcome == "ok",
+        "already_sent": False,
+        "outcome": outcome,
+        "detail": err,
+        "lead_id": lead_id,
+        "order_number": order.order_number,
+    }
+
+
 @router.post("/orders/ensure-sheet")
 def ensure_sheet_delivery(
     body: EnsureSheetDeliveryIn,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    """Thank-you backup when background sheet POST did not complete (Meta Lead already fired)."""
+    """Thank-you backup when sheet POST did not complete (Meta Lead already fired)."""
 
     try:
         oid = uuid.UUID(body.order_id.strip())
