@@ -41,6 +41,9 @@ DEFAULT_STORE_CONFIG: dict[str, Any] = {
     "brand_day_logs": [],
     "brand_day_defaults": {
         "creatives_per_day": 10,
+        # Challenge window: from start through end of September 2026.
+        "period_start": "2026-08-03",
+        "period_end": "2026-09-30",
     },
 }
 

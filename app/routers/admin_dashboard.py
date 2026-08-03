@@ -26,7 +26,7 @@ from app.services.admin_brand_day import (
     brand_day_bootstrap,
     delete_brand_day,
     list_brand_days,
-    month_resume,
+    period_resume,
     save_brand_day,
 )
 from app.services.admin_economics import compute_store_economics, sar_per_usd
@@ -931,29 +931,23 @@ def admin_brand_day_save(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    day_d = date.fromisoformat(row["day"])
+    period = period_resume(db)
     return {
         "ok": True,
         "entry": row,
-        "month": month_resume(db, day_d.year, day_d.month),
+        "month": period,
+        "period": period,
         "logs": list_brand_days(db)[:60],
     }
 
 
 @router.get("/admin/data/brand-day/month")
 def admin_brand_day_month(
-    year: int | None = None,
-    month: int | None = None,
     db: Session = Depends(get_db),
     _: str = Depends(require_admin_user),
 ) -> dict[str, Any]:
-    today = datetime.now(STORE_TZ).date()
-    y = year if year is not None else today.year
-    m = month if month is not None else today.month
-    try:
-        return {"ok": True, "month": month_resume(db, y, m)}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    period = period_resume(db)
+    return {"ok": True, "month": period, "period": period}
 
 
 @router.post("/admin/data/brand-day/delete")
@@ -968,9 +962,10 @@ def admin_brand_day_delete(
     ok = delete_brand_day(db, key)
     if not ok:
         raise HTTPException(status_code=404, detail="day not found")
-    today = datetime.now(STORE_TZ).date()
+    period = period_resume(db)
     return {
         "ok": True,
         "logs": list_brand_days(db)[:60],
-        "month": month_resume(db, today.year, today.month),
+        "month": period,
+        "period": period,
     }

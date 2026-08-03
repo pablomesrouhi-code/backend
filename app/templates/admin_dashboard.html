@@ -710,12 +710,12 @@
     <div class="panel" id="brand-panel" style="display:none;margin-top:16px;">
       <p class="section-title" style="border:none;padding:0;margin-bottom:8px;">يوم البراند — نبتة لابو</p>
       <p style="font-size:.86rem;color:var(--muted);margin:0 0 14px;line-height:1.55;">
-        عبّي <strong>كل نهار</strong>: شحال creative درتي (الهدف <span id="bd-goal-label">10</span>/يوم)
-        و واش كمّلتي les étapes. فآخر الشهر كيبان résumé واش قربتي للهدف.
+        الفترة: <strong id="bd-period-label">03/08 → 30/09/2026</strong> · عبّي <strong>كل نهار</strong>
+        (الهدف <span id="bd-goal-label">10</span> creative/يوم). Résumé كيحسب قربك للهدف حتى آخر شتنبر.
       </p>
 
       <div id="bd-month-box" class="bd-month-box warn">
-        <p class="v-label" style="margin:0 0 4px;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);">résumé الشهر</p>
+        <p class="v-label" style="margin:0 0 4px;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);">résumé الفترة (حتى آخر شتنبر)</p>
         <h3 id="bd-month-title">—</h3>
         <p class="bd-sum" id="bd-month-summary">Loading…</p>
         <div class="bd-progress" title="قرب الهدف"><span id="bd-month-bar"></span></div>
@@ -737,9 +737,6 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
           <button type="button" class="primary" id="bd-save-btn">حفظ نهار اليوم</button>
           <button type="button" class="ghost" id="bd-reload-btn">تحميل</button>
-          <label class="field" style="margin:0;min-width:140px;">شهر الـ résumé
-            <input type="month" id="bd-month-pick"/>
-          </label>
         </div>
         <p id="bd-form-msg" style="margin:10px 0 0;font-size:.82rem;color:var(--muted);"></p>
       </div>
@@ -765,7 +762,7 @@
           </table>
         </div>
       </div>
-      <footer class="note" style="margin-top:12px;">هدف افتراضي: 10 creative/يوم لـ نبتة لابو · تتحدّث نفس النهار إلا عاودتي الحفظ.</footer>
+      <footer class="note" style="margin-top:12px;">الفترة: من 03/08/2026 حتى 30/09/2026 · هدف 10 creative/يوم · نفس النهار يتحدّث إلا عاودتي الحفظ.</footer>
     </div>
 
     <div class="panel" id="settings-panel" style="display:none;margin-top:16px;">
@@ -1299,29 +1296,31 @@
       const v = m.verdict || {};
       const tone = v.tone === 'ok' ? 'ok' : (v.tone === 'bad' ? 'bad' : 'warn');
       box.className = 'bd-month-box ' + tone;
-      document.getElementById('bd-month-title').textContent = `${v.label_ar || '—'} · ${m.month_label_ar || ''}`;
+      const periodLabel = m.period_label_ar || m.month_label_ar || '';
+      document.getElementById('bd-month-title').textContent = `${v.label_ar || '—'} · ${periodLabel}`;
       document.getElementById('bd-month-summary').textContent = v.summary_ar || '';
       const pct = Math.max(0, Math.min(100, Number(m.closeness_pct) || 0));
       document.getElementById('bd-month-bar').style.width = pct + '%';
+      const targetPeriod = m.target_period ?? m.target_month ?? 0;
       document.getElementById('bd-month-pct').textContent =
-        `قرب الهدف: ${pct}% · Creatives ${m.total_creatives || 0}/${m.target_to_date || 0} حتى اليوم · هدف الشهر ${m.target_month || 0}`;
+        `قرب الهدف: ${pct}% · Creatives ${m.total_creatives || 0}/${m.target_to_date || 0} حتى اليوم · هدف الفترة ${targetPeriod} · باقي ${m.remaining_days ?? '—'} يوم`;
+      const pl = document.getElementById('bd-period-label');
+      if (pl && periodLabel) pl.textContent = periodLabel;
       document.getElementById('bd-month-actions').innerHTML =
         (v.actions_ar || []).map((t) => `<li>${String(t)}</li>`).join('');
       document.getElementById('bd-month-kpis').innerHTML = [
-        ['أيام معبّية', `${m.filled_days || 0}/${m.elapsed_days || 0}`, ''],
+        ['أيام الفترة', m.total_days, ''],
+        ['معبّية / فاتت', `${m.filled_days || 0}/${m.elapsed_days || 0}`, ''],
         ['Creatives', m.total_creatives, ''],
+        ['هدف الفترة', targetPeriod, ''],
         ['متوسط/يوم', m.avg_creatives, ''],
-        ['أيام وصلو الهدف', m.days_hit_goal, ''],
+        ['باقي أيام', m.remaining_days, ''],
         ['Étapes', m.steps_pct, '%'],
         ['قرب الهدف', m.closeness_pct, '%'],
       ].map(([k, val, u]) => {
         const show = val == null ? '—' : `${val}${u ? ' ' + u : ''}`;
         return `<div class="ads-kpi"><div class="k">${k}</div><div class="v">${show}</div></div>`;
       }).join('');
-      const pick = document.getElementById('bd-month-pick');
-      if (pick && m.year && m.month) {
-        pick.value = `${m.year}-${String(m.month).padStart(2, '0')}`;
-      }
     }
 
     function renderBdLogs(logs) {
@@ -1365,7 +1364,7 @@
             return;
           }
           renderBdLogs(j.logs || []);
-          renderBdMonth(j.month);
+          renderBdMonth(j.period || j.month);
         });
       });
     }
@@ -1393,7 +1392,7 @@
         document.getElementById('bd-creatives').placeholder = 'الهدف ' + bdGoal;
         bdStepsDef = j.steps_def || [];
         fillBdForm(j.entry, j.day);
-        renderBdMonth(j.month);
+        renderBdMonth(j.period || j.month);
         renderBdLogs(j.logs || []);
         msg.textContent = j.entry ? 'نهار محمّل — عدّل و احفظ.' : 'نهار جديد — عبّي و احفظ.';
         msg.style.color = 'var(--muted)';
@@ -1431,20 +1430,11 @@
         return;
       }
       fillBdForm(j.entry, day);
-      renderBdMonth(j.month);
+      renderBdMonth(j.period || j.month);
       renderBdLogs(j.logs || []);
       const sc = (j.entry && j.entry.score) || {};
       msg.textContent = `تحفّظ ✓ — ${sc.label_ar || ''} (${sc.score ?? '—'}/100)`;
       msg.style.color = 'var(--accent-mint)';
-    }
-
-    async function loadBrandMonthPick() {
-      const pick = document.getElementById('bd-month-pick').value;
-      if (!pick || pick.length < 7) return;
-      const [y, m] = pick.split('-').map(Number);
-      const r = await api(`/api/admin/data/brand-day/month?year=${y}&month=${m}`);
-      const j = await r.json().catch(() => ({}));
-      if (r.ok) renderBdMonth(j.month);
     }
 
     function adsNum(id) {
@@ -2030,7 +2020,6 @@
       const d = document.getElementById('bd-day').value;
       if (d) void loadBrandDay(d);
     });
-    document.getElementById('bd-month-pick').addEventListener('change', () => void loadBrandMonthPick());
     document.getElementById('tab-settings').addEventListener('click', () => {
       showAdminTab('settings');
       void loadStoreSettings();
