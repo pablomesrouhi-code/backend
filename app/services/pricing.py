@@ -13,7 +13,7 @@ from app.services.store_settings import (
 
 # Back-compat for imports; live values come from admin store_settings.
 BUNDLE_PRICES_SAR: dict[int, int] = {1: 199, 2: 279, 3: 349}
-UPSELL_PRICE_SAR = 89
+UPSELL_PRICE_SAR = 99
 
 
 def _bundle_prices() -> dict[int, int]:

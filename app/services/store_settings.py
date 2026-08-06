@@ -24,7 +24,7 @@ _DEFAULT_COD_FEES_USD: dict[str, float] = {
 
 DEFAULT_STORE_CONFIG: dict[str, Any] = {
     "bundle_prices_sar": {"1": 199, "2": 279, "3": 349},
-    "upsell_price_sar": 89,
+    "upsell_price_sar": 99,
     # Per-product tier overrides (naseej / vitaflow launch prices).
     "product_bundle_prices_sar": {
         "naseej": {"1": 189, "2": 219, "3": 279},
@@ -35,7 +35,7 @@ DEFAULT_STORE_CONFIG: dict[str, Any] = {
         "rawnaq_shahr": 349,  # 1× رونق C + 2× شهر هادئ
         "powder_trio": 349,  # 1× شهر هادئ + نسيج + فيتا فلو
     },
-    "pricing_schema": 2,
+    "pricing_schema": 3,
     "sar_per_usd": 3.75,
     "cod_fees_usd": copy.deepcopy(_DEFAULT_COD_FEES_USD),
     "profit_defaults": {
@@ -127,10 +127,14 @@ def _normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         )
         merged["combo_deals_sar"] = copy.deepcopy(DEFAULT_STORE_CONFIG["combo_deals_sar"])
         merged["pricing_schema"] = 2
+    if schema < 3:
+        # Revert upsell to 99 SAR (ops request).
+        merged["upsell_price_sar"] = 99
+        merged["pricing_schema"] = 3
     try:
-        merged["upsell_price_sar"] = max(0, int(merged.get("upsell_price_sar", 89)))
+        merged["upsell_price_sar"] = max(0, int(merged.get("upsell_price_sar", 99)))
     except (TypeError, ValueError):
-        merged["upsell_price_sar"] = 89
+        merged["upsell_price_sar"] = 99
     product_bundles_raw = merged.get("product_bundle_prices_sar") or {}
     product_bundles: dict[str, dict[str, int]] = {}
     if isinstance(product_bundles_raw, dict):
@@ -218,7 +222,7 @@ def bundle_prices_sar_int() -> dict[int, int]:
 
 
 def upsell_price_sar_int() -> int:
-    return int(get_store_config().get("upsell_price_sar", 89))
+    return int(get_store_config().get("upsell_price_sar", 99))
 
 
 def product_bundle_prices_sar_int(product_id: str) -> dict[int, int]:
