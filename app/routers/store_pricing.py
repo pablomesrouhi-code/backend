@@ -13,9 +13,13 @@ router = APIRouter()
 def public_pricing() -> dict[str, object]:
     cfg = get_store_config()
     bundles = bundle_prices_sar_int()
+    product_bundles = cfg.get("product_bundle_prices_sar") or {}
+    combos = cfg.get("combo_deals_sar") or {}
     return {
         "currency": "SAR",
         "bundles": {str(k): v for k, v in sorted(bundles.items())},
         "upsell_sar": upsell_price_sar_int(),
+        "product_bundles": product_bundles,
+        "combos": combos,
         "sar_per_usd": cfg.get("sar_per_usd"),
     }

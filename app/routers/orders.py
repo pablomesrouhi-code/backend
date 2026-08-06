@@ -42,7 +42,7 @@ from app.services.maxmind_fraud import evaluate_order_fraud
 from app.services.order_guard import validate_customer_name, validate_sa_mobile_local
 from app.services.pricing import (
     allocate_line_totals,
-    bundle_total_sar,
+    cart_subtotal_sar,
     line_unit_prices,
     upsell_price_sar,
 )
@@ -156,10 +156,16 @@ def create_order(
         product_keys.append(line.product_id.strip().lower())
 
     total_qty = sum(quantities)
+    priced_lines = list(zip(product_keys, quantities, strict=True))
     try:
-        subtotal = bundle_total_sar(total_qty)
+        subtotal = cart_subtotal_sar(priced_lines)
     except ValueError as e:
-        logger.warning("[orders] bundle_pricing_failed total_qty=%s: %s", total_qty, e)
+        logger.warning(
+            "[orders] bundle_pricing_failed total_qty=%s lines=%s: %s",
+            total_qty,
+            priced_lines,
+            e,
+        )
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     upsell_total = 0

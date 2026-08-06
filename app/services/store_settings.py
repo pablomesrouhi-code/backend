@@ -24,7 +24,18 @@ _DEFAULT_COD_FEES_USD: dict[str, float] = {
 
 DEFAULT_STORE_CONFIG: dict[str, Any] = {
     "bundle_prices_sar": {"1": 199, "2": 279, "3": 349},
-    "upsell_price_sar": 99,
+    "upsell_price_sar": 89,
+    # Per-product tier overrides (naseej / vitaflow launch prices).
+    "product_bundle_prices_sar": {
+        "naseej": {"1": 189, "2": 219, "3": 279},
+        "vitaflow": {"1": 189, "2": 219, "3": 279},
+    },
+    # Exact-cart combo deals (SAR).
+    "combo_deals_sar": {
+        "rawnaq_shahr": 349,  # 1× رونق C + 2× شهر هادئ
+        "powder_trio": 349,  # 1× شهر هادئ + نسيج + فيتا فلو
+    },
+    "pricing_schema": 2,
     "sar_per_usd": 3.75,
     "cod_fees_usd": copy.deepcopy(_DEFAULT_COD_FEES_USD),
     "profit_defaults": {
@@ -105,9 +116,50 @@ def _normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             normalized_bundles[key] = int(DEFAULT_STORE_CONFIG["bundle_prices_sar"][key])
     merged["bundle_prices_sar"] = normalized_bundles
     try:
-        merged["upsell_price_sar"] = max(0, int(merged.get("upsell_price_sar", 99)))
+        schema = int(merged.get("pricing_schema") or 1)
     except (TypeError, ValueError):
-        merged["upsell_price_sar"] = 99
+        schema = 1
+    # One-time in-memory upgrade so live checkout picks new catalog without waiting for admin save.
+    if schema < 2:
+        merged["upsell_price_sar"] = int(DEFAULT_STORE_CONFIG["upsell_price_sar"])
+        merged["product_bundle_prices_sar"] = copy.deepcopy(
+            DEFAULT_STORE_CONFIG["product_bundle_prices_sar"]
+        )
+        merged["combo_deals_sar"] = copy.deepcopy(DEFAULT_STORE_CONFIG["combo_deals_sar"])
+        merged["pricing_schema"] = 2
+    try:
+        merged["upsell_price_sar"] = max(0, int(merged.get("upsell_price_sar", 89)))
+    except (TypeError, ValueError):
+        merged["upsell_price_sar"] = 89
+    product_bundles_raw = merged.get("product_bundle_prices_sar") or {}
+    product_bundles: dict[str, dict[str, int]] = {}
+    if isinstance(product_bundles_raw, dict):
+        for pid, tiers in product_bundles_raw.items():
+            if not isinstance(tiers, dict):
+                continue
+            key = str(pid).strip().lower()
+            if not key:
+                continue
+            normalized_tiers: dict[str, int] = {}
+            for qty in (1, 2, 3):
+                qk = str(qty)
+                try:
+                    normalized_tiers[qk] = max(0, int(tiers.get(qk, merged["bundle_prices_sar"][qk])))
+                except (TypeError, ValueError):
+                    normalized_tiers[qk] = int(merged["bundle_prices_sar"][qk])
+            product_bundles[key] = normalized_tiers
+    merged["product_bundle_prices_sar"] = product_bundles
+    combos_raw = merged.get("combo_deals_sar") or {}
+    combos: dict[str, int] = {}
+    if isinstance(combos_raw, dict):
+        for name, price in combos_raw.items():
+            try:
+                combos[str(name)] = max(0, int(price))
+            except (TypeError, ValueError):
+                continue
+    for name, price in DEFAULT_STORE_CONFIG["combo_deals_sar"].items():
+        combos.setdefault(name, int(price))
+    merged["combo_deals_sar"] = combos
     try:
         merged["sar_per_usd"] = max(0.01, float(merged.get("sar_per_usd", 3.75)))
     except (TypeError, ValueError):
@@ -166,7 +218,32 @@ def bundle_prices_sar_int() -> dict[int, int]:
 
 
 def upsell_price_sar_int() -> int:
-    return int(get_store_config().get("upsell_price_sar", 99))
+    return int(get_store_config().get("upsell_price_sar", 89))
+
+
+def product_bundle_prices_sar_int(product_id: str) -> dict[int, int]:
+    """Tier prices for one product — override map, else default bundles."""
+
+    defaults = bundle_prices_sar_int()
+    pid = product_id.strip().lower()
+    overrides = get_store_config().get("product_bundle_prices_sar") or {}
+    raw = overrides.get(pid) if isinstance(overrides, dict) else None
+    if not isinstance(raw, dict):
+        return defaults
+    out: dict[int, int] = {}
+    for qty in (1, 2, 3):
+        try:
+            out[qty] = int(raw.get(str(qty), defaults[qty]))
+        except (TypeError, ValueError):
+            out[qty] = defaults[qty]
+    return out
+
+
+def combo_deal_sar(combo_id: str) -> int:
+    combos = get_store_config().get("combo_deals_sar") or {}
+    if combo_id not in combos:
+        raise ValueError(f"Unknown combo: {combo_id}")
+    return int(combos[combo_id])
 
 
 def sar_per_usd_rate() -> float:
