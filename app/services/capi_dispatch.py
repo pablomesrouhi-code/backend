@@ -383,7 +383,7 @@ async def dispatch_order_purchase_capi_events(
     source_url: str | None,
     purchase_event_id: str | None,
 ) -> None:
-    """Purchase CAPI only — fired after order save. Lead CAPI waits for thank-you page."""
+    """TikTok/Snap Purchase after order save. Meta Purchase waits for thank-you (post-MaxMind)."""
 
     if not _tracking_enabled():
         logger.info("[capi] skipped — TRACKING_ENABLED=false")
@@ -393,7 +393,7 @@ async def dispatch_order_purchase_capi_events(
     thank_you_url = source_url or "https://nabtalabo.store/thank-you"
 
     logger.info(
-        "[capi] purchase_dispatch order_id=%s order_number=%s purchase_event_id=%s content_ids=%s value=%s",
+        "[capi] purchase_dispatch_no_meta order_id=%s order_number=%s purchase_event_id=%s content_ids=%s value=%s",
         order_id,
         order_number,
         purchase_eid,
@@ -402,18 +402,6 @@ async def dispatch_order_purchase_capi_events(
     )
 
     results = await asyncio.gather(
-        send_meta_capi_event(
-            event_name="Purchase",
-            event_id=purchase_eid,
-            order_id=order_id,
-            order_number=order_number,
-            phone_plain=phone_plain,
-            client_ip=client_ip,
-            user_agent=user_agent,
-            value=value,
-            content_ids=content_ids,
-            source_url=thank_you_url,
-        ),
         send_tiktok_capi_event(
             event_name=TIKTOK_PURCHASE,
             event_id=purchase_eid,
@@ -443,6 +431,40 @@ async def dispatch_order_purchase_capi_events(
     for result in results:
         if isinstance(result, Exception):
             logger.error("[capi] purchase dispatch task failed: %s", result)
+
+
+async def dispatch_thank_you_meta_purchase_capi(
+    *,
+    order_id: uuid.UUID,
+    order_number: str,
+    phone_plain: str,
+    client_ip: str | None,
+    user_agent: str | None,
+    value: float,
+    content_ids: list[str],
+    purchase_event_id: str,
+) -> None:
+    """Meta Purchase CAPI — thank-you only after order passed MaxMind and exists in DB."""
+
+    if not _tracking_enabled():
+        return
+
+    purchase_eid = purchase_event_id.strip()
+    if not purchase_eid:
+        return
+
+    await send_meta_capi_event(
+        event_name="Purchase",
+        event_id=purchase_eid,
+        order_id=order_id,
+        order_number=order_number,
+        phone_plain=phone_plain,
+        client_ip=client_ip,
+        user_agent=user_agent,
+        value=value,
+        content_ids=content_ids,
+        source_url="https://nabtalabo.store/thank-you",
+    )
 
 
 async def dispatch_thank_you_lead_capi_events(
