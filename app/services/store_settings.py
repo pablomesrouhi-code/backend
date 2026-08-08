@@ -27,7 +27,7 @@ DEFAULT_STORE_CONFIG: dict[str, Any] = {
     "upsell_price_sar": 99,
     # Per-product tier overrides (shahr-hadi ad price + naseej / vitaflow).
     "product_bundle_prices_sar": {
-        "shahr-hadi": {"1": 189, "2": 269, "3": 339},
+        "shahr-hadi": {"1": 199, "2": 279, "3": 349},
         "naseej": {"1": 189, "2": 219, "3": 279},
         "vitaflow": {"1": 189, "2": 219, "3": 279},
     },
@@ -36,7 +36,7 @@ DEFAULT_STORE_CONFIG: dict[str, Any] = {
         "rawnaq_shahr": 349,  # 1× رونق C + 2× شهر هادئ
         "powder_trio": 349,  # 1× شهر هادئ + نسيج + فيتا فلو
     },
-    "pricing_schema": 5,
+    "pricing_schema": 6,
     "sar_per_usd": 3.75,
     "cod_fees_usd": copy.deepcopy(_DEFAULT_COD_FEES_USD),
     "profit_defaults": {
@@ -147,6 +147,13 @@ def _normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         product_bundles["shahr-hadi"] = {"1": 189, "2": 269, "3": 339}
         merged["product_bundle_prices_sar"] = product_bundles
         merged["pricing_schema"] = 5
+    if schema < 6:
+        product_bundles = merged.get("product_bundle_prices_sar")
+        if not isinstance(product_bundles, dict):
+            product_bundles = {}
+        product_bundles["shahr-hadi"] = {"1": 199, "2": 279, "3": 349}
+        merged["product_bundle_prices_sar"] = product_bundles
+        merged["pricing_schema"] = 6
     try:
         merged["upsell_price_sar"] = max(0, int(merged.get("upsell_price_sar", 99)))
     except (TypeError, ValueError):
