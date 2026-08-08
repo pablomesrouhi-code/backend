@@ -25,8 +25,9 @@ _DEFAULT_COD_FEES_USD: dict[str, float] = {
 DEFAULT_STORE_CONFIG: dict[str, Any] = {
     "bundle_prices_sar": {"1": 199, "2": 279, "3": 349},
     "upsell_price_sar": 99,
-    # Per-product tier overrides (naseej / vitaflow launch prices).
+    # Per-product tier overrides (shahr-hadi ad price + naseej / vitaflow).
     "product_bundle_prices_sar": {
+        "shahr-hadi": {"1": 179, "2": 259, "3": 329},
         "naseej": {"1": 189, "2": 219, "3": 279},
         "vitaflow": {"1": 189, "2": 219, "3": 279},
     },
@@ -35,7 +36,7 @@ DEFAULT_STORE_CONFIG: dict[str, Any] = {
         "rawnaq_shahr": 349,  # 1× رونق C + 2× شهر هادئ
         "powder_trio": 349,  # 1× شهر هادئ + نسيج + فيتا فلو
     },
-    "pricing_schema": 3,
+    "pricing_schema": 4,
     "sar_per_usd": 3.75,
     "cod_fees_usd": copy.deepcopy(_DEFAULT_COD_FEES_USD),
     "profit_defaults": {
@@ -131,6 +132,14 @@ def _normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         # Revert upsell to 99 SAR (ops request).
         merged["upsell_price_sar"] = 99
         merged["pricing_schema"] = 3
+    if schema < 4:
+        # Hormonal Balance (shahr-hadi) ad landing price cut — keep Rawnaq at default bundles.
+        product_bundles = merged.get("product_bundle_prices_sar")
+        if not isinstance(product_bundles, dict):
+            product_bundles = {}
+        product_bundles["shahr-hadi"] = {"1": 179, "2": 259, "3": 329}
+        merged["product_bundle_prices_sar"] = product_bundles
+        merged["pricing_schema"] = 4
     try:
         merged["upsell_price_sar"] = max(0, int(merged.get("upsell_price_sar", 99)))
     except (TypeError, ValueError):
