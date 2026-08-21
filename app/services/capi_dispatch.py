@@ -383,7 +383,7 @@ async def dispatch_order_purchase_capi_events(
     source_url: str | None,
     purchase_event_id: str | None,
 ) -> None:
-    """TikTok/Snap Purchase after order save. Meta Purchase waits for thank-you (post-MaxMind)."""
+    """TikTok/Snap Purchase after order save. Meta Purchase waits for thank-you."""
 
     if not _tracking_enabled():
         logger.info("[capi] skipped — TRACKING_ENABLED=false")
@@ -444,7 +444,7 @@ async def dispatch_thank_you_meta_purchase_capi(
     content_ids: list[str],
     purchase_event_id: str,
 ) -> None:
-    """Meta Purchase CAPI — thank-you only after order passed MaxMind and exists in DB."""
+    """Meta Purchase CAPI — thank-you only after the order exists in DB."""
 
     if not _tracking_enabled():
         return

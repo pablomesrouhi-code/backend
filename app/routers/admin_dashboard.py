@@ -368,7 +368,7 @@ def admin_metrics(
         "fixed_costs_sar": economics["fixed_costs_sar"],
         "notes": economics["notes"]
         + " conversion_rate_percent = orders / trusted_clicks (page_view events); "
-        "trusted = SA + MaxMind/IPQS analytics rules.",
+        "trusted = SA + optional IPQS analytics rules.",
     }
     if warning is not None:
         out["warning"] = warning

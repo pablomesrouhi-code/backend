@@ -1,4 +1,4 @@
-"""Pre-MaxMind guards: Saudi mobile + plausible customer name."""
+"""Saudi mobile + plausible customer name."""
 
 from __future__ import annotations
 

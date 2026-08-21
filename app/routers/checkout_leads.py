@@ -1,4 +1,4 @@
-"""Capture checkout attempts that fail before order save (MaxMind, API errors)."""
+"""Capture checkout attempts that fail before order save."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 # NabtaLabo API (backend)
 
-Python **FastAPI** service for NabtaLabo storefront: orders, fraud checks, webhooks, and tracking integrations.
+Python **FastAPI** service for NabtaLabo storefront: orders, webhooks, and tracking integrations.
 
 See `docs/` in the monorepo project spec for full architecture (`08-backend-architecture.md`).
 
@@ -51,7 +51,7 @@ Vars live in **EasyPanel → backend service env** (not committed): `DATABASE_UR
 | **`/sheet-webhook-status`** | `GET https://api.nabtalabo.store/api/sheet-webhook-status` → **`configured`: true** after you set `GOOGLE_SHEET_WEBHOOK_URL` on the API and redeploy. |
 | **Diagnostics** | If **`DATABASE_DIAGNOSTICS_TOKEN`** is set: `GET …/api/diagnostics/sheet-webhook?token=…`; replay sheet row: `POST …/api/diagnostics/resend-sheet-row?token=…` body `{"order_number":"nabta-…"}`. |
 
-Use whitelist phone **`055000000`** when `ORDER_TEST_PHONE_WHITELIST` includes it in prod, or test from local/dev with MaxMind relaxed.
+Use whitelist phone **`055000000`** when `ORDER_TEST_PHONE_WHITELIST` includes it in prod, or test from local/dev.
 
 **`curl`** (replace host if needed):
 

@@ -41,7 +41,6 @@ from app.services.capi_dispatch import (
 )
 from app.services.telegram_notify import notify_new_order
 from app.request_ip import client_ip
-from app.services.maxmind_fraud import evaluate_order_fraud
 from app.services.order_guard import validate_customer_name, validate_sa_mobile_local
 from app.services.pricing import (
     allocate_line_totals,
@@ -65,12 +64,10 @@ def _order_matches_lead_token(order: Order, lead_event_id: str) -> bool:
 
 
 def _order_eligible_for_meta(order: Order) -> tuple[bool, str]:
-    """Only real MaxMind-passed orders may count as Meta Lead/Purchase."""
+    """Only confirmed, non-cancelled orders may count as Meta Lead/Purchase."""
     status = (order.status or "").strip().lower()
     if status in {"cancelled", "canceled", "blocked", "rejected", "fraud"}:
         return False, f"status_{status or 'empty'}"
-    if order.maxmind_is_vpn or order.maxmind_is_proxy or order.maxmind_is_tor or order.maxmind_is_hosting:
-        return False, "maxmind_network_flag"
     return True, "ok"
 
 
@@ -227,31 +224,12 @@ def create_order(
         logger.warning("[orders] phone_not_sa_mobile masked=%s", mask_phone_sa(body.phone))
         raise HTTPException(status_code=400, detail="يرجى إدخال جوال سعودي صحيح (05XXXXXXXX).")
 
-    fraud = evaluate_order_fraud(
-        client_ip=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        phone_e164=phone_e164,
-        phone_local=phone_local,
-        order_total_sar=subtotal + upsell_total,
-    )
-    if not fraud.allowed:
-        logger.info(
-            "[orders] fraud_block source=%s phone=%s",
-            fraud.source,
-            mask_phone_sa(body.phone),
-        )
-        raise HTTPException(
-            status_code=403,
-            detail=fraud.detail or "عذراً، لا يمكن إكمال الطلب حالياً.",
-        )
-
     line_totals = allocate_line_totals(subtotal, quantities)
     unit_prices = line_unit_prices(line_totals, quantities)
 
     order_id = uuid.uuid4()
     order_number = next_order_number(db)
 
-    mm_fields = fraud.fields
     order = Order(
         id=order_id,
         order_number=order_number,
@@ -272,12 +250,6 @@ def create_order(
         purchase_event_id=body.purchase_event_id,
         ip_address=client_ip(request),
         user_agent=request.headers.get("user-agent"),
-        maxmind_country_iso=mm_fields.country_iso if mm_fields else None,
-        maxmind_risk_score=mm_fields.risk_score if mm_fields else None,
-        maxmind_is_vpn=mm_fields.is_vpn if mm_fields else None,
-        maxmind_is_proxy=mm_fields.is_proxy if mm_fields else None,
-        maxmind_is_tor=mm_fields.is_tor if mm_fields else None,
-        maxmind_is_hosting=mm_fields.is_hosting if mm_fields else None,
     )
     db.add(order)
 
@@ -589,7 +561,7 @@ def verify_tracking(
     body: EnsureSheetDeliveryIn,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    """Thank-you gate: Meta Lead/Purchase only when order exists and passed MaxMind."""
+    """Thank-you gate: Meta Lead/Purchase only when the order exists."""
 
     try:
         oid = uuid.UUID(body.order_id.strip())
@@ -625,7 +597,7 @@ async def ensure_lead_capi(
     body: EnsureSheetDeliveryIn,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    """Thank-you only: Lead CAPI + Meta Purchase (order already passed MaxMind)."""
+    """Thank-you only: Lead CAPI + Meta Purchase after the order exists."""
 
     try:
         oid = uuid.UUID(body.order_id.strip())
