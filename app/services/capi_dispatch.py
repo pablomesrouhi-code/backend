@@ -37,6 +37,7 @@ async def _skipped_coro() -> tuple[int, str]:
 def _tiktok_pixel_code() -> str:
     return (
         os.getenv("TIKTOK_PIXEL_CODE", "").strip()
+        or os.getenv("TIKTOK_PIXEL_ID", "").strip()
         or os.getenv("NEXT_PUBLIC_TIKTOK_PIXEL_ID", "").strip()
     )
 
