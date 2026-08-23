@@ -25,7 +25,8 @@ TIKTOK_PURCHASE = "Purchase"
 TIKTOK_LEAD = "Lead"
 SNAP_PURCHASE = "PURCHASE"
 SNAP_LEAD = "SIGN_UP"
-FALLBACK_TIKTOK_PIXEL_CODE = "DA520CJC77U72JPLTFRG"
+FALLBACK_TIKTOK_PIXEL_CODE = "DA52PS3C77U8CMLK5BO0"
+_STALE_TIKTOK_PIXEL_CODES = frozenset({"DA520CJC77U72JPLTFRG"})
 _SAFE_TIKTOK_CLICK_ID = re.compile(r"^[A-Za-z0-9._-]{8,256}$")
 
 
@@ -39,12 +40,16 @@ async def _skipped_coro() -> tuple[int, str]:
 
 
 def _tiktok_pixel_code() -> str:
-    return (
-        os.getenv("TIKTOK_PIXEL_CODE", "").strip()
-        or os.getenv("TIKTOK_PIXEL_ID", "").strip()
-        or os.getenv("NEXT_PUBLIC_TIKTOK_PIXEL_ID", "").strip()
-        or FALLBACK_TIKTOK_PIXEL_CODE
-    )
+    for raw in (
+        os.getenv("TIKTOK_PIXEL_CODE", ""),
+        os.getenv("TIKTOK_PIXEL_ID", ""),
+        os.getenv("NEXT_PUBLIC_TIKTOK_PIXEL_ID", ""),
+        FALLBACK_TIKTOK_PIXEL_CODE,
+    ):
+        code = raw.strip()
+        if code and code not in _STALE_TIKTOK_PIXEL_CODES:
+            return code
+    return FALLBACK_TIKTOK_PIXEL_CODE
 
 
 def _clean_tiktok_click_id(raw: str | None) -> str | None:
