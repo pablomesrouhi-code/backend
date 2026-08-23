@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import uuid
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy.orm import Session
 
@@ -23,6 +25,8 @@ TIKTOK_PURCHASE = "Purchase"
 TIKTOK_LEAD = "Lead"
 SNAP_PURCHASE = "PURCHASE"
 SNAP_LEAD = "SIGN_UP"
+FALLBACK_TIKTOK_PIXEL_CODE = "DA520CJC77U72JPLTFRG"
+_SAFE_TIKTOK_CLICK_ID = re.compile(r"^[A-Za-z0-9._-]{8,256}$")
 
 
 def _tracking_enabled() -> bool:
@@ -39,7 +43,25 @@ def _tiktok_pixel_code() -> str:
         os.getenv("TIKTOK_PIXEL_CODE", "").strip()
         or os.getenv("TIKTOK_PIXEL_ID", "").strip()
         or os.getenv("NEXT_PUBLIC_TIKTOK_PIXEL_ID", "").strip()
+        or FALLBACK_TIKTOK_PIXEL_CODE
     )
+
+
+def _clean_tiktok_click_id(raw: str | None) -> str | None:
+    v = (raw or "").strip()
+    if not v or not _SAFE_TIKTOK_CLICK_ID.fullmatch(v):
+        return None
+    return v
+
+
+def _ttclid_from_source_url(source_url: str | None) -> str | None:
+    if not source_url:
+        return None
+    try:
+        vals = parse_qs(urlparse(source_url).query).get("ttclid") or []
+        return _clean_tiktok_click_id(vals[0] if vals else None)
+    except Exception:
+        return None
 
 
 def _build_user_match(
@@ -47,6 +69,8 @@ def _build_user_match(
     phone_plain: str,
     client_ip: str | None,
     user_agent: str | None,
+    ttclid: str | None = None,
+    ttp: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Return (meta_user_data, tiktok_user, snap_user_data)."""
     meta_user: dict[str, Any] = {}
@@ -69,6 +93,13 @@ def _build_user_match(
         meta_user["client_user_agent"] = user_agent
         tiktok_user["user_agent"] = user_agent
         snap_user["client_user_agent"] = user_agent
+
+    clean_ttclid = _clean_tiktok_click_id(ttclid)
+    if clean_ttclid:
+        tiktok_user["ttclid"] = clean_ttclid
+    clean_ttp = _clean_tiktok_click_id(ttp)
+    if clean_ttp:
+        tiktok_user["ttp"] = clean_ttp
 
     return meta_user, tiktok_user, snap_user
 
@@ -244,6 +275,8 @@ async def send_tiktok_capi_event(
     value: float,
     content_ids: list[str],
     source_url: str | None,
+    ttclid: str | None = None,
+    ttp: str | None = None,
 ) -> None:
     pixel_code = _tiktok_pixel_code()
     token = os.getenv("TIKTOK_ACCESS_TOKEN", "").strip()
@@ -263,6 +296,8 @@ async def send_tiktok_capi_event(
         phone_plain=phone_plain,
         client_ip=client_ip,
         user_agent=user_agent,
+        ttclid=ttclid or _ttclid_from_source_url(source_url),
+        ttp=ttp,
     )
     properties: dict[str, Any] = {
         "currency": "SAR",
@@ -383,6 +418,8 @@ async def dispatch_order_purchase_capi_events(
     content_ids: list[str],
     source_url: str | None,
     purchase_event_id: str | None,
+    ttclid: str | None = None,
+    ttp: str | None = None,
 ) -> None:
     """TikTok/Snap Purchase after order save. Meta Purchase waits for thank-you."""
 
@@ -411,6 +448,8 @@ async def dispatch_order_purchase_capi_events(
             phone_plain=phone_plain,
             client_ip=client_ip,
             user_agent=user_agent,
+            ttclid=ttclid,
+            ttp=ttp,
             value=value,
             content_ids=content_ids,
             source_url=thank_you_url,
@@ -478,6 +517,7 @@ async def dispatch_thank_you_lead_capi_events(
     value: float,
     content_ids: list[str],
     lead_event_id: str,
+    source_page: str | None = None,
 ) -> None:
     """Lead CAPI — only after thank-you page (matches browser `trackLead`)."""
 
@@ -523,6 +563,7 @@ async def dispatch_thank_you_lead_capi_events(
             value=value,
             content_ids=content_ids,
             source_url=thank_you_url,
+            ttclid=_ttclid_from_source_url(source_page),
         ),
         send_snap_capi_event(
             event_name=SNAP_LEAD,
@@ -556,6 +597,8 @@ async def dispatch_order_capi_events(
     source_url: str | None,
     purchase_event_id: str | None,
     lead_event_id: str | None = None,
+    ttclid: str | None = None,
+    ttp: str | None = None,
 ) -> None:
     del lead_event_id
     await dispatch_order_purchase_capi_events(
@@ -568,4 +611,6 @@ async def dispatch_order_capi_events(
         content_ids=content_ids,
         source_url=source_url,
         purchase_event_id=purchase_event_id,
+        ttclid=ttclid,
+        ttp=ttp,
     )

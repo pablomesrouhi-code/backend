@@ -36,6 +36,8 @@ from app.services.sheet_webhook import (
     resend_persisted_order_to_sheet,
 )
 from app.services.capi_dispatch import (
+    _clean_tiktok_click_id,
+    _ttclid_from_source_url,
     dispatch_thank_you_lead_capi_events,
     dispatch_thank_you_meta_purchase_capi,
 )
@@ -51,6 +53,17 @@ from app.services.pricing import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _source_page_with_ttclid(source_page: str | None, ttclid: str | None) -> str | None:
+    clean = _clean_tiktok_click_id(ttclid)
+    if not clean:
+        return source_page
+    if _ttclid_from_source_url(source_page):
+        return source_page
+    base = (source_page or "https://nabtalabo.store/").strip() or "https://nabtalabo.store/"
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}ttclid={clean}"
 
 
 def _order_matches_lead_token(order: Order, lead_event_id: str) -> bool:
@@ -131,6 +144,8 @@ async def _run_order_capi_async(
     source_page: str | None,
     purchase_event_id: str | None,
     lead_event_id: str | None,
+    ttclid: str | None = None,
+    ttp: str | None = None,
 ) -> None:
     try:
         from app.services.capi_dispatch import dispatch_order_capi_events
@@ -146,6 +161,8 @@ async def _run_order_capi_async(
             source_url=source_page,
             purchase_event_id=purchase_event_id,
             lead_event_id=lead_event_id,
+            ttclid=ttclid,
+            ttp=ttp,
         )
     except Exception:
         logger.exception("[orders] CAPI background dispatch failed order_id=%s", order_id)
@@ -245,7 +262,7 @@ def create_order(
         upsell_product_id=(
             body.upsell_product_id.strip().lower() if body.upsell_product_id else None
         ),
-        source_page=body.source_page,
+        source_page=_source_page_with_ttclid(body.source_page, body.ttclid),
         client_event_id=body.client_event_id,
         purchase_event_id=body.purchase_event_id,
         ip_address=client_ip(request),
@@ -335,6 +352,8 @@ def create_order(
         source_page=body.source_page,
         purchase_event_id=body.purchase_event_id,
         lead_event_id=body.client_event_id,
+        ttclid=body.ttclid,
+        ttp=body.ttp,
     )
 
     try:
@@ -647,6 +666,7 @@ async def ensure_lead_capi(
             value=float(order.total_sar),
             content_ids=content_ids,
             lead_event_id=lead_eid,
+            source_page=order.source_page,
         )
 
     purchase_sent = bool(purchase_eid) and _meta_event_already_sent(

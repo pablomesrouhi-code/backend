@@ -19,6 +19,8 @@ class CreateOrderRequest(BaseModel):
     source_page: str | None = Field(default=None, max_length=2048)
     client_event_id: str | None = None
     purchase_event_id: str | None = None
+    ttclid: str | None = Field(default=None, max_length=256)
+    ttp: str | None = Field(default=None, max_length=256)
     payment_method: Literal["cash_on_delivery"] = Field(
         default="cash_on_delivery",
         description="Storefront is COD-only; field reserved for future gateways.",
