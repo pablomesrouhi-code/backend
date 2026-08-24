@@ -22,6 +22,7 @@ from app.tiktok_capi import send_tiktok_web_event
 logger = logging.getLogger(__name__)
 
 TIKTOK_PURCHASE = "Purchase"
+TIKTOK_COMPLETE_PAYMENT = "CompletePayment"
 TIKTOK_LEAD = "Lead"
 SNAP_PURCHASE = "PURCHASE"
 SNAP_LEAD = "SIGN_UP"
@@ -316,7 +317,7 @@ async def send_tiktok_capi_event(
     }
     if content_ids:
         properties["content_id"] = content_ids[0]
-    if event_name == TIKTOK_PURCHASE and order_number:
+    if event_name in (TIKTOK_PURCHASE, TIKTOK_COMPLETE_PAYMENT) and order_number:
         properties["order_id"] = order_number
     page = {"url": source_url} if source_url else None
     payload = {
@@ -448,6 +449,20 @@ async def dispatch_order_purchase_capi_events(
         send_tiktok_capi_event(
             event_name=TIKTOK_PURCHASE,
             event_id=purchase_eid,
+            order_id=order_id,
+            order_number=order_number,
+            phone_plain=phone_plain,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            ttclid=ttclid,
+            ttp=ttp,
+            value=value,
+            content_ids=content_ids,
+            source_url=thank_you_url,
+        ),
+        send_tiktok_capi_event(
+            event_name=TIKTOK_COMPLETE_PAYMENT,
+            event_id=f"{purchase_eid}-pay",
             order_id=order_id,
             order_number=order_number,
             phone_plain=phone_plain,
